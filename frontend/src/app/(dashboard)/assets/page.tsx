@@ -278,7 +278,7 @@ function AssetsList() {
                   <tr
                     key={asset.id}
                     id={`asset-row-${asset.id}`}
-                    onClick={() => router.push(`/assets`)} // route back to details or keep in view
+                    onClick={() => router.push(`/assets/${asset.id}`)}
                     className="hover:bg-surface-container-high/30 transition-all cursor-pointer group"
                   >
                     <td className="px-6 py-4">
