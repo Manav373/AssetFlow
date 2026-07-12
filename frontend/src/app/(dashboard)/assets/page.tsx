@@ -10,9 +10,9 @@
  * @collaboration Backend Developer A: GET /api/assets (paginated)
  */
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Asset, AssetStatus } from "@/types/api";
 
 // ─── Mock Data ───────────────────────────────────────────────────────────────
@@ -153,12 +153,18 @@ function StatusBadge({ status }: { status: AssetStatus }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function AssetsPage() {
+function AssetsList() {
   const router = useRouter();
-  const [search, setSearch] = useState("");
+  const searchParams = useSearchParams();
+  const queryParam = searchParams.get("q") || "";
+  const [search, setSearch] = useState(queryParam);
   const [filterCategory, setFilterCategory] = useState("");
   const [filterLocation, setFilterLocation] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+
+  useEffect(() => {
+    setSearch(queryParam);
+  }, [queryParam]);
 
   const filtered = useMemo(() => {
     return MOCK_ASSETS.filter((a) => {
@@ -424,5 +430,13 @@ export default function AssetsPage() {
       </div>
 
     </div>
+  );
+}
+
+export default function AssetsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-on-surface-variant font-mono">Loading assets...</div>}>
+      <AssetsList />
+    </Suspense>
   );
 }

@@ -69,13 +69,13 @@ export default function DashboardPage() {
 
       {/* Action Bar */}
       <div className="flex flex-wrap gap-3 items-center">
-        <button
-          onClick={() => alert("Redirecting to asset registration...")}
+        <Link
+          href="/assets/new"
           className="bg-primary text-on-primary font-bold px-4 py-2.5 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5"
         >
           <span className="material-symbols-outlined text-sm">add</span>
           Register Asset
-        </button>
+        </Link>
         <Link
           href="/booking"
           className="bg-surface-container border border-outline-variant text-on-surface hover:bg-surface-container-high font-bold px-4 py-2.5 rounded-lg text-xs uppercase tracking-wide active:scale-95 transition-all flex items-center gap-1.5"
@@ -83,13 +83,13 @@ export default function DashboardPage() {
           <span className="material-symbols-outlined text-sm">calendar_month</span>
           Book Resource
         </Link>
-        <button
-          onClick={() => alert("Loading pending transfer/return workflows...")}
+        <Link
+          href="/allocation"
           className="bg-surface-container border border-outline-variant text-on-surface hover:bg-surface-container-high font-bold px-4 py-2.5 rounded-lg text-xs uppercase tracking-wide active:scale-95 transition-all flex items-center gap-1.5"
         >
           <span className="material-symbols-outlined text-sm">notifications_active</span>
           Agree Requests
-        </button>
+        </Link>
       </div>
 
       {/* Details Row */}

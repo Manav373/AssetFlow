@@ -146,8 +146,22 @@ export default function ReportsPage() {
   const [viewMode, setViewMode] = useState<"live" | "historical">("live");
 
   const handleExport = (type: "pdf" | "excel") => {
-    const filename = `AssetFlow_Report_${new Date().toISOString().split("T")[0]}.${type === "pdf" ? "pdf" : "xlsx"}`;
-    alert(`Preparing ${type.toUpperCase()} export: ${filename}\n\n(Mock action — real export will be integrated with backend)`);
+    if (type === "excel") {
+      const headers = ["Department", "Utilization (%)", "Capacity (%)"];
+      const rows = DEPARTMENT_DATA.map((d) => [d.name, d.utilization, d.capacity]);
+      const csvContent = [headers, ...rows].map((e) => e.join(",")).join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `AssetFlow_Report_${new Date().toISOString().split("T")[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      window.print();
+    }
   };
 
   return (

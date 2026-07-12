@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useRouter } from "next/navigation";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -24,6 +25,7 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
+  const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
 
@@ -54,7 +56,9 @@ export default function LoginPage() {
         throw new Error("Invalid email or password.");
       }
       setIsSuccess(true);
-      // In real implementation: router.push('/dashboard')
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 1500);
     } catch (err: unknown) {
       setServerError(
         err instanceof Error ? err.message : "An unexpected error occurred."

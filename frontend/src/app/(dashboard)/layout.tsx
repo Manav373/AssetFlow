@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import React from "react";
 
 interface NavItemProps {
@@ -42,6 +42,16 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = React.useState("");
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      router.push(`/assets?q=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-background text-on-background">
       {/* SideNavBar */}
@@ -85,7 +95,7 @@ export default function DashboardLayout({
         {/* TopNavBar */}
         <header className="h-16 bg-surface border-b border-outline-variant flex justify-between items-center px-6 shrink-0 z-10">
           <div className="flex items-center gap-4 flex-1">
-            <div className="relative w-96 max-w-full">
+            <form onSubmit={handleSearchSubmit} className="relative w-96 max-w-full">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">
                 search
               </span>
@@ -93,32 +103,34 @@ export default function DashboardLayout({
                 className="w-full bg-surface-container border border-outline-variant rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all placeholder:text-on-surface-variant/60"
                 placeholder="Search activities, assets, or logs..."
                 type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
-            </div>
+            </form>
           </div>
 
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-3">
-              <button className="p-2 text-on-surface-variant hover:text-primary transition-colors" title="Help">
+              <Link href="/support" className="p-2 text-on-surface-variant hover:text-primary transition-colors flex items-center justify-center" title="Help">
                 <span className="material-symbols-outlined">help</span>
-              </button>
-              <button className="p-2 text-on-surface-variant hover:text-primary transition-colors" title="Apps">
+              </Link>
+              <Link href="/dashboard" className="p-2 text-on-surface-variant hover:text-primary transition-colors flex items-center justify-center" title="Dashboard Home">
                 <span className="material-symbols-outlined">apps</span>
-              </button>
+              </Link>
             </div>
             <div className="h-8 w-px bg-outline-variant"></div>
-            <button className="bg-primary text-on-primary px-4 py-2 rounded-lg font-semibold text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all">
+            <Link href="/assets/new" className="bg-primary text-on-primary px-4 py-2 rounded-lg font-semibold text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all text-center flex items-center justify-center">
               Add Asset
-            </button>
-            <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
-              <div className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant bg-surface-container">
+            </Link>
+            <Link href="/settings" className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" title="Settings">
+              <div className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant bg-surface-container font-semibold">
                 <img
                   className="w-full h-full object-cover"
                   alt="User Avatar"
                   src="https://lh3.googleusercontent.com/aida-public/AB6AXuD2zmEO92ZQ2e7MV3Y79w40MWD_zTyJWvcSXqOgckc5nCI93bTeCtIuTHe-M9fbOgEH_bKPSy_Yfn_URWdK1xICvCJVW0To7HQQCutBltMwAbti2kZsqUy29avYVsSJqG5zA3YnoXHF43hMSBzsvfR__WQ0lDp21WI8omKMlyOeiks1CVBz3CXJR0hJVnmqakc6k8bFPkgMlozhZZ9taBoWRrqnsme383tc71Orb0ivEbq231lM9Bjrn_mmHpGgeVkKFqzuPmiYD-6L"
                 />
               </div>
-            </div>
+            </Link>
           </div>
         </header>
 

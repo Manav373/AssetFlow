@@ -251,7 +251,17 @@ export default function NotificationsPage() {
                         className="bg-error text-on-error px-3 py-1 rounded text-xs font-semibold hover:brightness-110 transition-all ml-auto"
                         onClick={(e) => {
                           e.stopPropagation();
-                          alert("Initiating emergency recovery protocol...");
+                          setNotifications((prev) =>
+                            prev.map((n) =>
+                              n.id === item.id
+                                ? {
+                                    ...n,
+                                    message: "Emergency recovery protocol initiated successfully. Drone Unit Echo-1 is returning to base.",
+                                    isRead: true,
+                                  }
+                                : n
+                            )
+                          );
                         }}
                       >
                         Initiate Recovery
