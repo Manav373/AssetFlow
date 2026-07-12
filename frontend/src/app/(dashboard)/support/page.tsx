@@ -40,6 +40,7 @@ export default function SupportPage() {
   const [assets, setAssets] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
 
   // Ticket Form States
   const [ticketTitle, setTicketTitle] = useState("");
@@ -73,9 +74,11 @@ export default function SupportPage() {
     const userMsg = { sender: "user" as const, text: query };
     setChatHistory((prev) => [...prev, userMsg]);
     setSearchQuery("");
+    setIsTyping(true);
 
     // AI Natural Language Parsing Rules
     setTimeout(() => {
+      setIsTyping(false);
       const normalized = query.toLowerCase();
       let reply = "";
       let foundData: any[] = [];
@@ -277,6 +280,16 @@ export default function SupportPage() {
                 )}
               </div>
             ))}
+
+            {isTyping && (
+              <div className="flex flex-col items-start animate-pulse">
+                <div className="bg-surface-container border border-outline-variant/40 rounded-xl px-4 py-3 flex items-center gap-1.5 shadow-sm">
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]" />
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]" />
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Chat Input */}
