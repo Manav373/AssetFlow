@@ -16,10 +16,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
+import { NotificationGateway } from '../gateway/notification.gateway';
 
 @Injectable()
 export class BookingsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private gateway: NotificationGateway,
+  ) {}
 
   /**
    * Creates a new booking after validating no time-slot collision exists.
@@ -61,7 +65,7 @@ export class BookingsService {
       throw new BadRequestException('Asset is already booked during this time frame');
     }
 
-    return this.prisma.resourceBooking.create({
+    const booking = await this.prisma.resourceBooking.create({
       data: {
         assetId,
         bookedById,
@@ -74,6 +78,9 @@ export class BookingsService {
         bookedBy: { select: { id: true, firstName: true, lastName: true, email: true } },
       },
     });
+
+    this.gateway.broadcastDashboardRefresh();
+    return booking;
   }
 
   async findAll(assetId?: string) {
@@ -145,9 +152,12 @@ export class BookingsService {
       throw new BadRequestException('You can only cancel your own bookings');
     }
 
-    return this.prisma.resourceBooking.update({
+    const updated = await this.prisma.resourceBooking.update({
       where: { id },
       data: { status: 'CANCELLED' },
     });
+
+    this.gateway.broadcastDashboardRefresh();
+    return updated;
   }
 }

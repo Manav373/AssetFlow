@@ -6,7 +6,7 @@
  * @collaboration Consumed by Frontend Developer 3 for sign-in/sign-up forms.
  */
 
-import { Controller, Post, Body, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
@@ -46,6 +46,12 @@ export class AuthController {
   async logout(@Req() req: Request) {
     const user = req.user as any;
     return this.authService.logout(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('users')
+  async getUsers() {
+    return this.authService.getUsers();
   }
 
   @Post('forgot-password')

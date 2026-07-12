@@ -87,6 +87,7 @@ export class AssetsService {
     categoryId?: string;
     locationId?: string;
     status?: string;
+    isBookable?: string | boolean;
     page?: number;
     limit?: number;
   }) {
@@ -106,6 +107,10 @@ export class AssetsService {
 
     if (query.status) {
       where.status = query.status;
+    }
+
+    if (query.isBookable !== undefined) {
+      where.isBookable = query.isBookable === 'true' || query.isBookable === true;
     }
 
     if (query.search) {
@@ -177,5 +182,11 @@ export class AssetsService {
       throw new NotFoundException(`Asset with ID ${id} not found`);
     }
     return asset;
+  }
+
+  async findLocations() {
+    return this.prisma.location.findMany({
+      where: { isActive: true },
+    });
   }
 }

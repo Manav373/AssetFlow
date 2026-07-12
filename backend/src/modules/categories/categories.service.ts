@@ -41,4 +41,10 @@ export class CategoriesService {
 
     return tree;
   }
+
+  async findAll() {
+    return this.prisma.assetCategory.findMany({
+      where: { isActive: true },
+    });
+  }
 }

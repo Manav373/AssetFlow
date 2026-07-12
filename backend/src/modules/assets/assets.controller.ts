@@ -31,6 +31,7 @@ export class AssetsController {
     @Query('categoryId') categoryId?: string,
     @Query('locationId') locationId?: string,
     @Query('status') status?: string,
+    @Query('isBookable') isBookable?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
@@ -39,9 +40,15 @@ export class AssetsController {
       categoryId,
       locationId,
       status,
+      isBookable,
       page,
       limit,
     });
+  }
+
+  @Get('locations')
+  findLocations() {
+    return this.assetsService.findLocations();
   }
 
   @Get(':id')

@@ -19,4 +19,9 @@ export class CategoriesController {
   getTree() {
     return this.categoriesService.getTree();
   }
+
+  @Get()
+  findAll() {
+    return this.categoriesService.findAll();
+  }
 }

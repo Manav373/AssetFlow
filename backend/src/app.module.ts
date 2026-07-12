@@ -11,6 +11,7 @@ import { TransfersModule } from './modules/transfers/transfers.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { AuditsModule } from './modules/audits/audits.module';
 import { GatewayModule } from './modules/gateway/gateway.module';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { GatewayModule } from './modules/gateway/gateway.module';
     BookingsModule,      // POST /bookings, GET /bookings/slots
     AuditsModule,        // POST /audits/cycles|assignments|verifications, PATCH /audits/cycles/:id/lock
     GatewayModule,       // Socket.IO WebSocket gateway (notification:new, dashboard:refresh)
+    MaintenanceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

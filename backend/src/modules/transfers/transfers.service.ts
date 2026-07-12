@@ -17,10 +17,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransferDto } from './dto/create-transfer.dto';
+import { NotificationGateway } from '../gateway/notification.gateway';
 
 @Injectable()
 export class TransfersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gateway: NotificationGateway,
+  ) {}
 
   /**
    * POST /transfers — Create a new transfer request (status: REQUESTED).
@@ -47,7 +51,7 @@ export class TransfersService {
       );
     }
 
-    return this.prisma.transferRequest.create({
+    const transfer = await this.prisma.transferRequest.create({
       data: {
         assetId,
         targetDeptId,
@@ -60,6 +64,9 @@ export class TransfersService {
         requestedBy: { select: { id: true, firstName: true, lastName: true } },
       },
     });
+
+    this.gateway.broadcastDashboardRefresh();
+    return transfer;
   }
 
   async findAll() {
@@ -100,7 +107,7 @@ export class TransfersService {
       );
     }
 
-    return this.prisma.transferRequest.update({
+    const updated = await this.prisma.transferRequest.update({
       where: { id },
       data: { status: 'DEPT_HEAD_APPROVED' },
       include: {
@@ -108,6 +115,9 @@ export class TransfersService {
         targetDept: true,
       },
     });
+
+    this.gateway.broadcastDashboardRefresh();
+    return updated;
   }
 
   /**
@@ -148,7 +158,54 @@ export class TransfersService {
       }),
     ]);
 
+    this.gateway.broadcastDashboardRefresh();
     return updatedTransfer;
+  }
+
+  async deptReject(id: string) {
+    const transfer = await this.prisma.transferRequest.findUnique({ where: { id } });
+    if (!transfer) throw new NotFoundException(`Transfer request with ID ${id} not found`);
+
+    if (transfer.status !== 'REQUESTED') {
+      throw new BadRequestException(
+        `Transfer must be in REQUESTED status to be rejected. Current status: ${transfer.status}`,
+      );
+    }
+
+    const updated = await this.prisma.transferRequest.update({
+      where: { id },
+      data: { status: 'DEPT_HEAD_REJECTED' },
+      include: {
+        asset: { select: { id: true, assetTag: true, name: true } },
+        targetDept: true,
+      },
+    });
+
+    this.gateway.broadcastDashboardRefresh();
+    return updated;
+  }
+
+  async managerReject(id: string) {
+    const transfer = await this.prisma.transferRequest.findUnique({ where: { id } });
+    if (!transfer) throw new NotFoundException(`Transfer request with ID ${id} not found`);
+
+    if (transfer.status !== 'DEPT_HEAD_APPROVED') {
+      throw new BadRequestException(
+        `Transfer must be in DEPT_HEAD_APPROVED status for manager rejection. Current status: ${transfer.status}`,
+      );
+    }
+
+    const updated = await this.prisma.transferRequest.update({
+      where: { id },
+      data: { status: 'ASSET_MANAGER_REJECTED' },
+      include: {
+        asset: { select: { id: true, assetTag: true, name: true } },
+        targetDept: true,
+      },
+    });
+
+    this.gateway.broadcastDashboardRefresh();
+    return updated;
   }
 
   /**
@@ -167,9 +224,12 @@ export class TransfersService {
       throw new ForbiddenException(`Only the requester can cancel this transfer`);
     }
 
-    return this.prisma.transferRequest.update({
+    const updated = await this.prisma.transferRequest.update({
       where: { id },
       data: { status: 'CANCELLED' },
     });
+
+    this.gateway.broadcastDashboardRefresh();
+    return updated;
   }
 }

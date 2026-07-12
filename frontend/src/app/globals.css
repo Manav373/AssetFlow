@@ -1,42 +1,58 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0b1326;
-  --foreground: #dae2fd;
+  --background: #0a0f1e;
+  --foreground: #e2e8f4;
   
-  --primary: #adc6ff;
-  --on-primary: #002e6a;
-  --primary-container: #4d8eff;
-  --on-primary-container: #00285d;
+  /* Primary — Electric Indigo / Violet */
+  --primary: #818cf8;
+  --on-primary: #1e1b4b;
+  --primary-container: #6366f1;
+  --on-primary-container: #e0e7ff;
   
-  --secondary: #b7c8e1;
-  --on-secondary: #213145;
-  --secondary-container: #3a4a5f;
-  --on-secondary-container: #a9bad3;
+  /* Secondary — Cyan / Teal */
+  --secondary: #22d3ee;
+  --on-secondary: #083344;
+  --secondary-container: #0891b2;
+  --on-secondary-container: #cffafe;
   
-  --tertiary: #ffb786;
-  --on-tertiary: #502400;
-  --tertiary-container: #df7412;
-  --on-tertiary-container: #461f00;
+  /* Tertiary — Amber / Warm Orange */
+  --tertiary: #fbbf24;
+  --on-tertiary: #451a03;
+  --tertiary-container: #d97706;
+  --on-tertiary-container: #fef3c7;
 
-  --error: #ffb4ab;
-  --on-error: #690005;
-  --error-container: #93000a;
-  --on-error-container: #ffdad6;
+  /* Error — Rose / Red */
+  --error: #fb7185;
+  --on-error: #4c0519;
+  --error-container: #9f1239;
+  --on-error-container: #ffe4e6;
   
-  --surface: #0b1326;
-  --on-surface: #dae2fd;
-  --surface-dim: #0b1326;
-  --surface-bright: #31394d;
+  /* Success — Emerald */
+  --success: #34d399;
+  --on-success: #064e3b;
+
+  /* Warning — Amber */
+  --warning: #f59e0b;
+  --on-warning: #451a03;
+
+  /* Info — Sky */
+  --info: #38bdf8;
+  --on-info: #082f49;
   
-  --surface-container-lowest: #060e20;
-  --surface-container-low: #131b2e;
-  --surface-container: #171f33;
-  --surface-container-high: #222a3d;
-  --surface-container-highest: #2d3449;
+  --surface: #0f1629;
+  --on-surface: #e2e8f4;
+  --surface-dim: #0a0f1e;
+  --surface-bright: #1e293b;
   
-  --outline: #8c909f;
-  --outline-variant: #424754;
+  --surface-container-lowest: #060a17;
+  --surface-container-low: #111827;
+  --surface-container: #161d2f;
+  --surface-container-high: #1e2742;
+  --surface-container-highest: #273352;
+  
+  --outline: #64748b;
+  --outline-variant: #334155;
 }
 
 @theme {
@@ -62,6 +78,15 @@
   --color-on-error: var(--on-error);
   --color-error-container: var(--error-container);
   --color-on-error-container: var(--on-error-container);
+
+  --color-success: var(--success);
+  --color-on-success: var(--on-success);
+
+  --color-warning: var(--warning);
+  --color-on-warning: var(--on-warning);
+
+  --color-info: var(--info);
+  --color-on-info: var(--on-info);
   
   --color-surface: var(--surface);
   --color-on-surface: var(--on-surface);
@@ -96,8 +121,8 @@ body {
 }
 
 .glass-card {
-  background: rgba(30, 41, 59, 0.4);
-  backdrop-filter: blur(8px);
+  background: rgba(15, 22, 41, 0.6);
+  backdrop-filter: blur(12px);
   border: 1px solid var(--color-outline-variant);
 }
 

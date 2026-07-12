@@ -1,167 +1,253 @@
-
-/**
- * @module AssetAllocation
- * @description Handover form with conflict rule checking and transfer requests panel.
- * @authors Developer 4
- * @status In-Progress
- * @collaboration Frontend team consumes POST /api/allocations payload
- */
-
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { apiFetch } from "@/lib/api";
+import { useWebsockets } from "@/hooks/useWebsockets";
 
-// --- Mock Data ---
+// --- Types ---
 interface Asset {
   id: string;
   name: string;
   serial: string;
   currentHolder?: string;
-  department?: string;
+  currentHolderId?: string;
+  departmentId?: string;
+  departmentName?: string;
 }
 
 interface Employee {
   id: string;
   name: string;
-  department: string;
+  departmentId?: string;
+  departmentName?: string;
   role: string;
 }
 
 interface TransferRequest {
   id: string;
+  assetId: string;
   assetName: string;
   fromEmployee: string;
   toEmployee: string;
-  status: "Pending Dept Head" | "Pending Manager" | "Approved" | "Rejected";
+  status: string;
   requestDate: string;
   notes: string;
 }
 
-const MOCK_ASSETS: Asset[] = [
-  { id: "a1", name: "Laptop AF-0196", serial: "S/N: 10234-A", currentHolder: "Priya Shah", department: "IT" },
-  { id: "a2", name: "Projector AF-0062", serial: "S/N: 20451-B" },
-  { id: "a3", name: "Vehicle AF-0311", serial: "S/N: 33102-C", currentHolder: "Raj Patel", department: "Logistics" },
-  { id: "a4", name: "Monitor AF-0089", serial: "S/N: 44892-D" },
-  { id: "a5", name: "Printer AF-0127", serial: "S/N: 55713-E" },
-  { id: "a6", name: "Server NV-12", serial: "S/N: 11043-L", currentHolder: "Vikram Desai", department: "R&D" },
-];
+const STATUS_STYLES: Record<string, { bg: string; text: string; icon: string }> = {
+  REQUESTED: { bg: "bg-tertiary/10", text: "text-tertiary", icon: "hourglass_top" },
+  DEPT_HEAD_APPROVED: { bg: "bg-primary/10", text: "text-primary", icon: "pending" },
+  DEPT_HEAD_REJECTED: { bg: "bg-error/10", text: "text-error", icon: "cancel" },
+  ASSET_MANAGER_APPROVED: { bg: "bg-secondary/10", text: "text-secondary", icon: "check_circle" },
+  ASSET_MANAGER_REJECTED: { bg: "bg-error/10", text: "text-error", icon: "cancel" },
+  TRANSFERRED: { bg: "bg-secondary/10", text: "text-secondary", icon: "check_circle" },
+  CANCELLED: { bg: "bg-error/10", text: "text-error", icon: "cancel" },
+};
 
-const MOCK_EMPLOYEES: Employee[] = [
-  { id: "e1", name: "Priya Shah", department: "IT", role: "Engineer" },
-  { id: "e2", name: "Arjun Mehta", department: "R&D", role: "Lead" },
-  { id: "e3", name: "Neha Kapoor", department: "Admin", role: "Coordinator" },
-  { id: "e4", name: "Raj Patel", department: "Logistics", role: "Supervisor" },
-  { id: "e5", name: "Simran Kaur", department: "Quality", role: "Analyst" },
-];
-
-const MOCK_TRANSFERS: TransferRequest[] = [
-  {
-    id: "t1",
-    assetName: "Laptop AF-0196",
-    fromEmployee: "Priya Shah",
-    toEmployee: "Arjun Mehta",
-    status: "Pending Dept Head",
-    requestDate: "2026-07-10",
-    notes: "Cross-department transfer for R&D project",
-  },
-  {
-    id: "t2",
-    assetName: "Vehicle AF-0311",
-    fromEmployee: "Raj Patel",
-    toEmployee: "Neha Kapoor",
-    status: "Pending Manager",
-    requestDate: "2026-07-09",
-    notes: "Temporary reassignment for admin logistics",
-  },
-  {
-    id: "t3",
-    assetName: "Tablet AF-0044",
-    fromEmployee: "Vikram Desai",
-    toEmployee: "Simran Kaur",
-    status: "Approved",
-    requestDate: "2026-07-05",
-    notes: "QC site visits",
-  },
-  {
-    id: "t4",
-    assetName: "Camera AF-0093",
-    fromEmployee: "Arjun Mehta",
-    toEmployee: "Raj Patel",
-    status: "Rejected",
-    requestDate: "2026-07-03",
-    notes: "Not available — in active use",
-  },
-];
-
-const STATUS_STYLES: Record<TransferRequest["status"], { bg: string; text: string; icon: string }> = {
-  "Pending Dept Head": { bg: "bg-tertiary/10", text: "text-tertiary", icon: "hourglass_top" },
-  "Pending Manager": { bg: "bg-primary/10", text: "text-primary", icon: "pending" },
-  Approved: { bg: "bg-secondary/10", text: "text-secondary", icon: "check_circle" },
-  Rejected: { bg: "bg-error/10", text: "text-error", icon: "cancel" },
+const mapStatusToFront = (status: string) => {
+  if (status === "REQUESTED") return "Pending Dept Head";
+  if (status === "DEPT_HEAD_APPROVED") return "Pending Manager";
+  if (status === "DEPT_HEAD_REJECTED") return "Rejected by Dept Head";
+  if (status === "ASSET_MANAGER_APPROVED" || status === "TRANSFERRED") return "Approved";
+  if (status === "ASSET_MANAGER_REJECTED") return "Rejected by Manager";
+  if (status === "CANCELLED") return "Cancelled";
+  return status;
 };
 
 export default function AllocationPage() {
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [transfers, setTransfers] = useState<TransferRequest[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+
   const [selectedAssetId, setSelectedAssetId] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [returnDate, setReturnDate] = useState("");
   const [notes, setNotes] = useState("");
-  const [transfers, setTransfers] = useState<TransferRequest[]>(MOCK_TRANSFERS);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // Load current user profile to verify roles
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const uStr = localStorage.getItem("user");
+      if (uStr) {
+        try {
+          setCurrentUser(JSON.parse(uStr));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+  }, []);
+
+  const loadData = useCallback(async () => {
+    try {
+      // 1. Fetch Assets
+      const assetsData = await apiFetch("/assets?limit=100");
+      setAssets(
+        assetsData.data.map((a: any) => ({
+          id: a.id,
+          name: `${a.name} (${a.assetTag})`,
+          serial: a.serialNumber ? `S/N: ${a.serialNumber}` : "No S/N",
+          currentHolder: a.allocations && a.allocations.length > 0
+            ? `${a.allocations[0].allocatedTo?.firstName} ${a.allocations[0].allocatedTo?.lastName}`
+            : undefined,
+          currentHolderId: a.allocations && a.allocations.length > 0
+            ? a.allocations[0].allocatedTo?.id
+            : undefined,
+          departmentId: a.departmentId || undefined,
+          departmentName: a.department?.name || undefined,
+        }))
+      );
+
+      // 2. Fetch Employees (Users)
+      const usersData = await apiFetch("/auth/users");
+      setEmployees(
+        usersData.map((u: any) => ({
+          id: u.id,
+          name: `${u.firstName} ${u.lastName}`,
+          departmentId: u.department?.id,
+          departmentName: u.department?.name,
+          role: u.role,
+        }))
+      );
+
+      // 3. Fetch Departments
+      const deptsData = await apiFetch("/departments");
+      setDepartments(deptsData);
+
+      // 4. Fetch Transfers
+      const transfersData = await apiFetch("/transfers");
+      setTransfers(
+        transfersData.map((t: any) => {
+          // Find asset current holder from employee list if possible, or fallback
+          return {
+            id: t.id,
+            assetId: t.assetId,
+            assetName: t.asset ? `${t.asset.name} (${t.asset.assetTag})` : "Unknown Asset",
+            fromEmployee: "Current Holder", // Fallback placeholder
+            toEmployee: `${t.requestedBy?.firstName || ""} ${t.requestedBy?.lastName || ""}`,
+            status: t.status,
+            requestDate: t.createdAt ? new Date(t.createdAt).toISOString().split("T")[0] : "",
+            notes: t.notes || `Reassign department transfer to ${t.targetDept?.name || "Target Department"}`,
+          };
+        })
+      );
+    } catch (err: any) {
+      console.error("Error loading allocation data:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // WebSocket support
+  useWebsockets({
+    onDashboardRefresh: () => {
+      loadData();
+    },
+  });
 
   const selectedAsset = useMemo(
-    () => MOCK_ASSETS.find((a) => a.id === selectedAssetId),
-    [selectedAssetId]
+    () => assets.find((a) => a.id === selectedAssetId),
+    [assets, selectedAssetId]
   );
 
   const isConflict = selectedAsset?.currentHolder != null;
 
-  const handleSubmitAllocation = () => {
+  const handleSubmitAllocation = async () => {
     if (!selectedAssetId || !selectedEmployeeId || !returnDate) return;
     if (isConflict) return;
 
-    const asset = MOCK_ASSETS.find((a) => a.id === selectedAssetId);
-    const emp = MOCK_EMPLOYEES.find((e) => e.id === selectedEmployeeId);
-    setSuccessMessage(
-      `✓ ${asset?.name} successfully allocated to ${emp?.name}. Return expected by ${returnDate}.`
-    );
-    setSelectedAssetId("");
-    setSelectedEmployeeId("");
-    setReturnDate("");
-    setNotes("");
-    setTimeout(() => setSuccessMessage(""), 4000);
+    setErrorMessage("");
+    try {
+      const asset = assets.find((a) => a.id === selectedAssetId);
+      const emp = employees.find((e) => e.id === selectedEmployeeId);
+
+      await apiFetch("/allocations", {
+        method: "POST",
+        body: JSON.stringify({
+          assetId: selectedAssetId,
+          allocatedToId: selectedEmployeeId,
+          expectedReturnDate: new Date(returnDate).toISOString(),
+        }),
+      });
+
+      setSuccessMessage(
+        `✓ ${asset?.name} successfully allocated to ${emp?.name}. Return expected by ${returnDate}.`
+      );
+      setSelectedAssetId("");
+      setSelectedEmployeeId("");
+      setReturnDate("");
+      setNotes("");
+      setTimeout(() => setSuccessMessage(""), 4000);
+      loadData();
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to submit allocation.");
+    }
   };
 
-  const handleRequestTransfer = () => {
+  const handleRequestTransfer = async () => {
     if (!selectedAsset || !selectedEmployeeId) return;
-    const emp = MOCK_EMPLOYEES.find((e) => e.id === selectedEmployeeId);
-    const newTransfer: TransferRequest = {
-      id: `t${Date.now()}`,
-      assetName: selectedAsset.name,
-      fromEmployee: selectedAsset.currentHolder!,
-      toEmployee: emp?.name || "Unknown",
-      status: "Pending Dept Head",
-      requestDate: new Date().toISOString().split("T")[0],
-      notes: notes || "Transfer request submitted",
-    };
-    setTransfers((prev) => [newTransfer, ...prev]);
-    setShowTransferModal(false);
-    setSelectedAssetId("");
-    setSelectedEmployeeId("");
-    setNotes("");
-    setSuccessMessage("✓ Transfer request submitted successfully.");
-    setTimeout(() => setSuccessMessage(""), 4000);
+    const emp = employees.find((e) => e.id === selectedEmployeeId);
+    if (!emp?.departmentId) {
+      setErrorMessage("Recipient must be assigned to a department to request transfer.");
+      return;
+    }
+
+    setErrorMessage("");
+    try {
+      await apiFetch("/transfers", {
+        method: "POST",
+        body: JSON.stringify({
+          assetId: selectedAsset.id,
+          targetDeptId: emp.departmentId,
+        }),
+      });
+
+      setShowTransferModal(false);
+      setSelectedAssetId("");
+      setSelectedEmployeeId("");
+      setNotes("");
+      setSuccessMessage("✓ Transfer request submitted successfully.");
+      setTimeout(() => setSuccessMessage(""), 4000);
+      loadData();
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to request transfer.");
+    }
   };
 
-  const handleTransferAction = (id: string, action: "Approved" | "Rejected") => {
-    setTransfers((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status: action } : t))
-    );
+  const handleTransferAction = async (id: string, currentStatus: string, action: "Approved" | "Rejected") => {
+    setErrorMessage("");
+    try {
+      let endpoint = "";
+      if (currentStatus === "REQUESTED") {
+        endpoint = action === "Approved" ? "dept-approve" : "dept-reject";
+      } else if (currentStatus === "DEPT_HEAD_APPROVED") {
+        endpoint = action === "Approved" ? "manager-approve" : "manager-reject";
+      }
+
+      if (!endpoint) return;
+
+      await apiFetch(`/transfers/${id}/${endpoint}`, {
+        method: "PATCH",
+      });
+
+      setSuccessMessage(`✓ Transfer request successfully ${action.toLowerCase()}.`);
+      setTimeout(() => setSuccessMessage(""), 4000);
+      loadData();
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to process transfer action.");
+    }
   };
 
-  // Simulated logged-in user role for Approve/Reject visibility
-  const userRole = "Manager";
+  const userRole = currentUser?.role; // ADMIN | ASSET_MANAGER | DEPARTMENT_HEAD | EMPLOYEE
 
   return (
     <div className="space-y-6">
@@ -175,7 +261,7 @@ export default function AllocationPage() {
         </p>
       </div>
 
-      {/* Success Banner */}
+      {/* Success/Error Banners */}
       <AnimatePresence>
         {successMessage && (
           <motion.div
@@ -188,6 +274,19 @@ export default function AllocationPage() {
               task_alt
             </span>
             <span className="text-sm font-semibold">{successMessage}</span>
+          </motion.div>
+        )}
+        {errorMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="bg-error/10 border border-error/30 rounded-xl p-4 flex items-center gap-3 text-error"
+          >
+            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
+              error
+            </span>
+            <span className="text-sm font-semibold">{errorMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -213,7 +312,7 @@ export default function AllocationPage() {
               className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2.5 text-sm text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all appearance-none cursor-pointer"
             >
               <option value="">Choose an asset…</option>
-              {MOCK_ASSETS.map((a) => (
+              {assets.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name} — {a.serial}
                 </option>
@@ -238,11 +337,11 @@ export default function AllocationPage() {
                   <p className="text-on-surface-variant text-xs leading-relaxed">
                     This asset is currently assigned to{" "}
                     <span className="text-on-surface font-semibold">{selectedAsset.currentHolder}</span>{" "}
-                    ({selectedAsset.department} Dept). Direct allocation is blocked.
+                    {selectedAsset.departmentName && `(${selectedAsset.departmentName} Dept)`}. Direct allocation is blocked.
                   </p>
                   <button
                     onClick={() => setShowTransferModal(true)}
-                    className="bg-tertiary/15 text-tertiary border border-tertiary/25 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide hover:bg-tertiary/25 transition-all flex items-center gap-1.5"
+                    className="bg-tertiary/15 text-tertiary border border-tertiary/25 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide hover:bg-tertiary/25 transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <span className="material-symbols-outlined text-sm">swap_horiz</span>
                     Request Transfer Instead
@@ -263,9 +362,9 @@ export default function AllocationPage() {
               className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2.5 text-sm text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all appearance-none cursor-pointer"
             >
               <option value="">Choose an employee…</option>
-              {MOCK_EMPLOYEES.map((emp) => (
+              {employees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
-                  {emp.name} — {emp.department} ({emp.role})
+                  {emp.name} {emp.departmentName && `— ${emp.departmentName}`} ({emp.role})
                 </option>
               ))}
             </select>
@@ -302,7 +401,7 @@ export default function AllocationPage() {
           <button
             onClick={handleSubmitAllocation}
             disabled={!selectedAssetId || !selectedEmployeeId || !returnDate || isConflict}
-            className="w-full bg-primary text-on-primary font-bold px-4 py-3 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100 flex items-center justify-center gap-2"
+            className="w-full bg-primary text-on-primary font-bold px-4 py-3 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100 flex items-center justify-center gap-2 cursor-pointer"
           >
             <span className="material-symbols-outlined text-sm">check</span>
             Submit Allocation
@@ -325,10 +424,13 @@ export default function AllocationPage() {
 
           <div className="space-y-3">
             {transfers.map((tr, i) => {
-              const style = STATUS_STYLES[tr.status];
+              const style = STATUS_STYLES[tr.status] || { bg: "bg-surface-container", text: "text-on-surface-variant", icon: "pending" };
+              
+              // Validate permissions dynamically
               const canAct =
-                (tr.status === "Pending Dept Head" || tr.status === "Pending Manager") &&
-                (userRole === "Manager" || userRole === "Dept Head");
+                (tr.status === "REQUESTED" && (userRole === "DEPARTMENT_HEAD" || userRole === "ADMIN")) ||
+                (tr.status === "DEPT_HEAD_APPROVED" && (userRole === "ASSET_MANAGER" || userRole === "ADMIN"));
+
               return (
                 <motion.div
                   key={tr.id}
@@ -350,7 +452,7 @@ export default function AllocationPage() {
                       <div>
                         <p className="text-sm font-semibold text-on-surface">{tr.assetName}</p>
                         <p className="text-xs text-on-surface-variant">
-                          {tr.fromEmployee}{" "}
+                          Allocated holder
                           <span className="material-symbols-outlined text-[10px] align-middle mx-1">
                             arrow_forward
                           </span>{" "}
@@ -362,7 +464,7 @@ export default function AllocationPage() {
                       <span
                         className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${style.bg} ${style.text}`}
                       >
-                        {tr.status}
+                        {mapStatusToFront(tr.status)}
                       </span>
                       <p className="text-[10px] text-on-surface-variant font-mono mt-1">
                         {tr.requestDate}
@@ -370,22 +472,22 @@ export default function AllocationPage() {
                     </div>
                   </div>
 
-                  <p className="text-xs text-on-surface-variant border-t border-outline-variant/30 pt-2">
+                  <p className="text-xs text-on-surface-variant border-t border-outline-variant/30 pt-2 font-mono">
                     {tr.notes}
                   </p>
 
                   {canAct && (
                     <div className="flex gap-2 pt-1">
                       <button
-                        onClick={() => handleTransferAction(tr.id, "Approved")}
-                        className="flex-1 bg-secondary/10 text-secondary border border-secondary/20 px-3 py-1.5 rounded-lg text-xs font-bold uppercase hover:bg-secondary/20 transition-all flex items-center justify-center gap-1"
+                        onClick={() => handleTransferAction(tr.id, tr.status, "Approved")}
+                        className="flex-1 bg-success/10 text-success border border-success/25 px-3 py-1.5 rounded-lg text-xs font-bold uppercase hover:bg-success/20 transition-all flex items-center justify-center gap-1 cursor-pointer"
                       >
                         <span className="material-symbols-outlined text-sm">check</span>
                         Approve
                       </button>
                       <button
-                        onClick={() => handleTransferAction(tr.id, "Rejected")}
-                        className="flex-1 bg-error/10 text-error border border-error/20 px-3 py-1.5 rounded-lg text-xs font-bold uppercase hover:bg-error/20 transition-all flex items-center justify-center gap-1"
+                        onClick={() => handleTransferAction(tr.id, tr.status, "Rejected")}
+                        className="flex-1 bg-error/10 text-error border border-error/20 px-3 py-1.5 rounded-lg text-xs font-bold uppercase hover:bg-error/20 transition-all flex items-center justify-center gap-1 cursor-pointer"
                       >
                         <span className="material-symbols-outlined text-sm">close</span>
                         Reject
@@ -395,6 +497,11 @@ export default function AllocationPage() {
                 </motion.div>
               );
             })}
+            {transfers.length === 0 && (
+              <div className="text-center py-8 text-xs text-on-surface-variant italic">
+                No active transfer requests found.
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -414,7 +521,7 @@ export default function AllocationPage() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="glass-card rounded-2xl p-6 w-full max-w-md space-y-5 shadow-2xl"
+              className="glass-card rounded-2xl p-6 w-full max-w-md space-y-5 shadow-2xl bg-surface"
             >
               <div className="flex items-center justify-between">
                 <h3 className="font-hanken font-bold text-xl text-on-surface">Transfer Request</h3>
@@ -446,31 +553,18 @@ export default function AllocationPage() {
                   className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2.5 text-sm text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all appearance-none cursor-pointer"
                 >
                   <option value="">Choose recipient…</option>
-                  {MOCK_EMPLOYEES.filter((e) => e.name !== selectedAsset.currentHolder).map((emp) => (
+                  {employees.filter((e) => e.id !== selectedAsset.currentHolderId).map((emp) => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.name} — {emp.department}
+                      {emp.name} {emp.departmentName && `— ${emp.departmentName}`}
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-on-surface-variant text-xs font-semibold uppercase tracking-wider">
-                  Reason / Notes
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={3}
-                  placeholder="Reason for transfer…"
-                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2.5 text-sm text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all resize-none placeholder:text-on-surface-variant/50"
-                />
-              </div>
-
               <button
                 onClick={handleRequestTransfer}
                 disabled={!selectedEmployeeId}
-                className="w-full bg-tertiary text-on-tertiary font-bold px-4 py-3 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full bg-tertiary text-on-tertiary font-bold px-4 py-3 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span className="material-symbols-outlined text-sm">send</span>
                 Submit Transfer Request

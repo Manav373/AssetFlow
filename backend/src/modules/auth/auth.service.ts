@@ -199,6 +199,27 @@ export class AuthService {
     return { success: true, message: 'Password has been reset successfully' };
   }
 
+  async getUsers() {
+    return this.prisma.user.findMany({
+      select: {
+        id: true,
+        employeeId: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isActive: true,
+        department: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
+      },
+    });
+  }
+
   // --- Helper Methods ---
 
   private async getTokens(userId: string, email: string, role: string, employeeId: string) {

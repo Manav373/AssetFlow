@@ -17,10 +17,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateAuditCycleDto } from './dto/create-audit-cycle.dto';
 import { CreateAuditAssignmentDto } from './dto/create-audit-assignment.dto';
 import { CreateAuditVerificationDto } from './dto/create-audit-verification.dto';
+import { NotificationGateway } from '../gateway/notification.gateway';
 
 @Injectable()
 export class AuditsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gateway: NotificationGateway,
+  ) {}
 
   // ─────────────────────────────────────────────
   // Audit Cycles
@@ -31,7 +35,7 @@ export class AuditsService {
    */
   async createCycle(dto: CreateAuditCycleDto) {
     const { name, startDate, endDate, status } = dto;
-    return this.prisma.auditCycle.create({
+    const cycle = await this.prisma.auditCycle.create({
       data: {
         name,
         startDate: new Date(startDate),
@@ -39,6 +43,8 @@ export class AuditsService {
         status: status ?? 'PLANNED',
       },
     });
+    this.gateway.broadcastDashboardRefresh();
+    return cycle;
   }
 
   async findAllCycles() {
@@ -79,10 +85,12 @@ export class AuditsService {
       throw new BadRequestException(`Audit cycle is already locked`);
     }
 
-    return this.prisma.auditCycle.update({
+    const updated = await this.prisma.auditCycle.update({
       where: { id },
       data: { isLocked: true, status: 'COMPLETED', endDate: cycle.endDate ?? new Date() },
     });
+    this.gateway.broadcastDashboardRefresh();
+    return updated;
   }
 
   // ─────────────────────────────────────────────
@@ -104,7 +112,7 @@ export class AuditsService {
     const auditor = await this.prisma.user.findUnique({ where: { id: auditorId } });
     if (!auditor) throw new NotFoundException(`User with ID ${auditorId} not found`);
 
-    return this.prisma.auditAssignment.create({
+    const assignment = await this.prisma.auditAssignment.create({
       data: { cycleId, auditorId, departmentId, locationId },
       include: {
         auditor: { select: { id: true, firstName: true, lastName: true, email: true } },
@@ -113,6 +121,8 @@ export class AuditsService {
         cycle: { select: { id: true, name: true, status: true } },
       },
     });
+    this.gateway.broadcastDashboardRefresh();
+    return assignment;
   }
 
   async findAllAssignments(cycleId?: string) {
@@ -156,11 +166,13 @@ export class AuditsService {
     });
     if (existing) {
       // Update existing verification instead of duplicating
-      return this.prisma.auditVerification.update({
+      const updated = await this.prisma.auditVerification.update({
         where: { id: existing.id },
         data: { status, notes, verifiedAt: new Date() },
         include: { asset: { select: { id: true, assetTag: true, name: true } } },
       });
+      this.gateway.broadcastDashboardRefresh();
+      return updated;
     }
 
     const operations: any[] = [
@@ -181,6 +193,7 @@ export class AuditsService {
     }
 
     const [verification] = await this.prisma.$transaction(operations);
+    this.gateway.broadcastDashboardRefresh();
     return verification;
   }
 

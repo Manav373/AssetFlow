@@ -1,143 +1,28 @@
 "use client";
 
-
-/**
- * @module AssetsPage
- * @description Asset directory view with filter bar, status badges, and deep-link routing.
- *              Clicking a row routes to /assets/[id].
- * @authors Developer 3
- * @status In-Progress (mock data; awaiting GET /api/assets from Backend Developer A)
- * @collaboration Backend Developer A: GET /api/assets (paginated)
- */
-
-import React, { useState, useMemo, useEffect, Suspense } from "react";
+import React, { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { apiFetch } from "@/lib/api";
+import { useWebsockets } from "@/hooks/useWebsockets";
 import type { Asset, AssetStatus } from "@/types/api";
 
-// ─── Mock Data ───────────────────────────────────────────────────────────────
-
-const MOCK_ASSETS: Asset[] = [
-  {
-    id: "1",
-    tag: "AF-0001",
-    name: "MacBook Pro 14\"",
-    category: "Laptops",
-    status: "Allocated",
-    currentHolder: "Priya Shah",
-    location: "IT Floor – Desk 12",
-    serialNumber: "C02X1234HV2N",
-  },
-  {
-    id: "2",
-    tag: "AF-0002",
-    name: "ThinkPad X1 Carbon",
-    category: "Laptops",
-    status: "Available",
-    currentHolder: undefined,
-    location: "Storage Room A",
-    serialNumber: "PF2Y0089KL",
-  },
-  {
-    id: "3",
-    tag: "AF-0003",
-    name: 'Dell UltraSharp 27"',
-    category: "Monitors",
-    status: "Allocated",
-    currentHolder: "Rahul Mehta",
-    location: "IT Floor – Desk 01",
-    serialNumber: "CN04Y6G7839DL",
-  },
-  {
-    id: "4",
-    tag: "AF-0004",
-    name: "Epson Projector EB-X51",
-    category: "Projectors",
-    status: "Maintenance",
-    currentHolder: undefined,
-    location: "Maintenance Bay",
-    serialNumber: "EPSXB451090",
-  },
-  {
-    id: "5",
-    tag: "AF-0005",
-    name: "iPhone 14 Pro",
-    category: "Smartphones",
-    status: "Allocated",
-    currentHolder: "Anjali Verma",
-    location: "HR Department",
-    serialNumber: "F5RK2029JL3N",
-  },
-  {
-    id: "6",
-    tag: "AF-0006",
-    name: "Cisco Catalyst 2960",
-    category: "Switches",
-    status: "Available",
-    currentHolder: undefined,
-    location: "Server Room",
-    serialNumber: "FHH1230P07K",
-  },
-  {
-    id: "7",
-    tag: "AF-0007",
-    name: "Office Chair — Ergonomic",
-    category: "Chairs",
-    status: "Allocated",
-    currentHolder: "Meera Pillai",
-    location: "Operations Floor",
-    serialNumber: undefined,
-  },
-  {
-    id: "8",
-    tag: "AF-0008",
-    name: "iPad Pro 12.9\"",
-    category: "Tablets",
-    status: "Retired",
-    currentHolder: undefined,
-    location: "Retired Assets Store",
-    serialNumber: "DLXK7023AM",
-  },
-  {
-    id: "9",
-    tag: "AF-0009",
-    name: "HP LaserJet Pro",
-    category: "Printers",
-    status: "Available",
-    currentHolder: undefined,
-    location: "Office Floor 2",
-    serialNumber: "CNB9J00012",
-  },
-  {
-    id: "10",
-    tag: "AF-0010",
-    name: "Dell PowerEdge R740",
-    category: "Servers",
-    status: "Maintenance",
-    currentHolder: undefined,
-    location: "Data Center",
-    serialNumber: "DELLPE74X0010",
-  },
-];
-
-const ALL_CATEGORIES = Array.from(new Set(MOCK_ASSETS.map((a) => a.category)));
-const ALL_LOCATIONS = Array.from(new Set(MOCK_ASSETS.map((a) => a.location)));
-const ALL_STATUSES: AssetStatus[] = [
-  "Available",
-  "Allocated",
-  "Maintenance",
-  "Retired",
-  "Lost",
-];
-
-// ─── Status Badge ─────────────────────────────────────────────────────────────
+// ─── Status Badge mapping ─────────────────────────────────────────────────────
 
 const STATUS_STYLES: Record<AssetStatus, string> = {
-  Available: "bg-primary/10 text-primary border-primary/20",
-  Allocated: "bg-secondary/10 text-secondary border-secondary/20",
-  Maintenance: "bg-tertiary/10 text-tertiary border-tertiary/20",
+  Available: "bg-success/10 text-success border-success/25",
+  Allocated: "bg-info/10 text-info border-info/25",
+  Maintenance: "bg-warning/10 text-warning border-warning/25",
   Retired: "bg-outline-variant/30 text-on-surface-variant border-outline-variant",
-  Lost: "bg-error-container/20 text-error border-error/20",
+  Lost: "bg-error/10 text-error border-error/25",
+};
+
+const mapStatusToFront = (status: string): AssetStatus => {
+  if (status === "AVAILABLE") return "Available";
+  if (status === "ALLOCATED") return "Allocated";
+  if (status === "UNDER_MAINTENANCE") return "Maintenance";
+  if (status === "RETIRED") return "Retired";
+  return "Lost";
 };
 
 function StatusBadge({ status }: { status: AssetStatus }) {
@@ -157,29 +42,81 @@ function AssetsList() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryParam = searchParams.get("q") || "";
+
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
+
   const [search, setSearch] = useState(queryParam);
   const [filterCategory, setFilterCategory] = useState("");
   const [filterLocation, setFilterLocation] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
 
-  useEffect(() => {
-    setSearch(queryParam);
-  }, [queryParam]);
+  const loadFilters = async () => {
+    try {
+      const cats = await apiFetch("/categories");
+      setCategories(cats);
+      const locs = await apiFetch("/assets/locations");
+      setLocations(locs);
+    } catch (err) {
+      console.error("Error loading filters:", err);
+    }
+  };
 
-  const filtered = useMemo(() => {
-    return MOCK_ASSETS.filter((a) => {
-      const q = search.toLowerCase();
-      const matchesSearch =
-        !q ||
-        a.tag.toLowerCase().includes(q) ||
-        a.name.toLowerCase().includes(q) ||
-        (a.serialNumber?.toLowerCase().includes(q) ?? false);
-      const matchesCat = !filterCategory || a.category === filterCategory;
-      const matchesLoc = !filterLocation || a.location === filterLocation;
-      const matchesStatus = !filterStatus || a.status === filterStatus;
-      return matchesSearch && matchesCat && matchesLoc && matchesStatus;
-    });
+  const loadAssets = useCallback(async () => {
+    try {
+      // Map frontend status to backend status enum
+      let statusParam = "";
+      if (filterStatus === "Available") statusParam = "AVAILABLE";
+      if (filterStatus === "Allocated") statusParam = "ALLOCATED";
+      if (filterStatus === "Maintenance") statusParam = "UNDER_MAINTENANCE";
+      if (filterStatus === "Retired") statusParam = "RETIRED";
+      if (filterStatus === "Lost") statusParam = "LOST";
+
+      const queryObj: Record<string, string> = {};
+      if (search) queryObj.search = search;
+      if (filterCategory) queryObj.categoryId = filterCategory;
+      if (filterLocation) queryObj.locationId = filterLocation;
+      if (statusParam) queryObj.status = statusParam;
+      queryObj.limit = "100";
+
+      const queryString = new URLSearchParams(queryObj).toString();
+      const res = await apiFetch(`/assets?${queryString}`);
+
+      const mapped = res.data.map((asset: any) => ({
+        id: asset.id,
+        tag: asset.assetTag,
+        name: asset.name,
+        category: asset.category?.name || "",
+        status: mapStatusToFront(asset.status),
+        currentHolder: asset.allocations && asset.allocations.length > 0
+          ? `${asset.allocations[0].allocatedTo?.firstName} ${asset.allocations[0].allocatedTo?.lastName}`
+          : undefined,
+        location: asset.location?.name || "",
+        serialNumber: asset.serialNumber || undefined,
+        description: asset.description || undefined,
+      }));
+
+      setAssets(mapped);
+    } catch (err) {
+      console.error("Error loading assets:", err);
+    }
   }, [search, filterCategory, filterLocation, filterStatus]);
+
+  useEffect(() => {
+    loadFilters();
+  }, []);
+
+  useEffect(() => {
+    loadAssets();
+  }, [loadAssets]);
+
+  // Real-time synchronization
+  useWebsockets({
+    onDashboardRefresh: () => {
+      loadAssets();
+    },
+  });
 
   const hasFilters = search || filterCategory || filterLocation || filterStatus;
 
@@ -192,7 +129,7 @@ function AssetsList() {
             Asset Directory
           </h2>
           <p className="text-on-surface-variant text-sm mt-1">
-            {filtered.length} of {MOCK_ASSETS.length} assets
+            {assets.length} assets registered in directory
           </p>
         </div>
         <Link
@@ -230,9 +167,9 @@ function AssetsList() {
           className="bg-surface-container-low border border-outline-variant rounded-lg px-3 py-2.5 text-sm text-on-surface outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all cursor-pointer"
         >
           <option value="">All Categories</option>
-          {ALL_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
             </option>
           ))}
         </select>
@@ -245,9 +182,9 @@ function AssetsList() {
           className="bg-surface-container-low border border-outline-variant rounded-lg px-3 py-2.5 text-sm text-on-surface outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all cursor-pointer"
         >
           <option value="">All Locations</option>
-          {ALL_LOCATIONS.map((l) => (
-            <option key={l} value={l}>
-              {l}
+          {locations.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
             </option>
           ))}
         </select>
@@ -260,11 +197,11 @@ function AssetsList() {
           className="bg-surface-container-low border border-outline-variant rounded-lg px-3 py-2.5 text-sm text-on-surface outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all cursor-pointer"
         >
           <option value="">All Statuses</option>
-          {ALL_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
+          <option value="Available">Available</option>
+          <option value="Allocated">Allocated</option>
+          <option value="Maintenance">Maintenance</option>
+          <option value="Retired">Retired</option>
+          <option value="Lost">Lost</option>
         </select>
 
         {/* Clear Filters */}
@@ -309,7 +246,7 @@ function AssetsList() {
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/30">
-              {filtered.length === 0 ? (
+              {assets.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
@@ -337,11 +274,11 @@ function AssetsList() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((asset) => (
+                assets.map((asset) => (
                   <tr
                     key={asset.id}
                     id={`asset-row-${asset.id}`}
-                    onClick={() => router.push(`/assets/${asset.id}`)}
+                    onClick={() => router.push(`/assets`)} // route back to details or keep in view
                     className="hover:bg-surface-container-high/30 transition-all cursor-pointer group"
                   >
                     <td className="px-6 py-4">
@@ -402,30 +339,8 @@ function AssetsList() {
         {/* Table Footer */}
         <div className="px-6 py-3 border-t border-outline-variant/30 flex items-center justify-between bg-surface-container/20">
           <span className="text-xs text-on-surface-variant font-mono">
-            Showing {filtered.length} of {MOCK_ASSETS.length} assets
+            Showing {assets.length} assets
           </span>
-          <div className="flex items-center gap-4 text-xs text-on-surface-variant font-mono">
-            {ALL_STATUSES.filter((s) =>
-              MOCK_ASSETS.some((a) => a.status === s)
-            ).map((s) => (
-              <span key={s} className="flex items-center gap-1">
-                <span
-                  className={`w-1.5 h-1.5 rounded-full bg-current ${
-                    s === "Available"
-                      ? "text-primary"
-                      : s === "Allocated"
-                      ? "text-secondary"
-                      : s === "Maintenance"
-                      ? "text-tertiary"
-                      : s === "Retired"
-                      ? "text-outline"
-                      : "text-error"
-                  }`}
-                />
-                {MOCK_ASSETS.filter((a) => a.status === s).length} {s}
-              </span>
-            ))}
-          </div>
         </div>
       </div>
 

@@ -1,19 +1,12 @@
 "use client";
 
-/**
- * @module AuditPage
- * @description Asset Verification & Audit dashboard view.
- *              Allows scheduling audits, verifying inventory status, and logging discrepancies.
- * @authors Antigravity
- * @status Complete
- */
-
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import Modal from "@/components/ui/Modal";
+import { apiFetch } from "@/lib/api";
+import { useWebsockets } from "@/hooks/useWebsockets";
 
-// ─── Interfaces ──────────────────────────────────────────────────────────────
-
+// --- Interfaces ---
 interface AuditAsset {
   id: string;
   tag: string;
@@ -22,7 +15,7 @@ interface AuditAsset {
   location: string;
   currentHolder?: string;
   status: "Pending" | "Verified" | "Discrepancy";
-  condition?: "New" | "Good" | "Fair" | "Poor";
+  condition?: string;
   flagReason?: string;
   auditedAt?: string;
 }
@@ -31,12 +24,14 @@ interface DiscrepancyItem {
   id: string;
   assetTag: string;
   assetName: string;
-  type: "Missing" | "Damaged" | "Location Mismatch" | "Holder Mismatch";
+  type: string;
   details: string;
   severity: "Critical" | "High" | "Medium" | "Low";
-  status: "Open" | "Investigating" | "Resolved";
+  status: "Open" | "Resolved";
   reportedAt: string;
   resolvedAt?: string;
+  assignmentId: string;
+  assetId: string;
 }
 
 interface AuditRound {
@@ -48,68 +43,22 @@ interface AuditRound {
   verifiedAssets: number;
   dueDate: string;
   status: "Not Started" | "In Progress" | "Completed";
+  isLocked: boolean;
 }
-
-// ─── Mock Data ───────────────────────────────────────────────────────────────
-
-const INITIAL_AUDIT_ASSETS: AuditAsset[] = [
-  { id: "1", tag: "AF-0001", name: "MacBook Pro 14\"", category: "Laptops", location: "IT Floor – Desk 12", currentHolder: "Priya Shah", status: "Pending" },
-  { id: "2", tag: "AF-0002", name: "ThinkPad X1 Carbon", category: "Laptops", location: "Storage Room A", currentHolder: undefined, status: "Verified", condition: "Good", auditedAt: "2026-07-11" },
-  { id: "3", tag: "AF-0003", name: 'Dell UltraSharp 27"', category: "Monitors", location: "IT Floor – Desk 01", currentHolder: "Rahul Mehta", status: "Pending" },
-  { id: "4", tag: "AF-0004", name: "Epson Projector EB-X51", category: "Projectors", location: "Conference Room B", currentHolder: undefined, status: "Discrepancy", flagReason: "Location Mismatch - Found in Room A instead", auditedAt: "2026-07-10" },
-  { id: "5", tag: "AF-0005", name: "iPhone 14 Pro", category: "Smartphones", location: "HR Department", currentHolder: "Anjali Verma", status: "Pending" },
-  { id: "6", tag: "AF-0006", name: "Cisco Catalyst 2960", category: "Switches", location: "Server Room", currentHolder: undefined, status: "Verified", condition: "New", auditedAt: "2026-07-09" },
-  { id: "7", tag: "AF-0007", name: "Office Chair — Ergonomic", category: "Chairs", location: "Operations Floor", currentHolder: "Meera Pillai", status: "Pending" },
-  { id: "8", tag: "AF-0010", name: "Dell PowerEdge R740", category: "Servers", location: "Data Center", currentHolder: undefined, status: "Pending" },
-];
-
-const INITIAL_DISCREPANCIES: DiscrepancyItem[] = [
-  {
-    id: "d1",
-    assetTag: "AF-0004",
-    assetName: "Epson Projector EB-X51",
-    type: "Location Mismatch",
-    details: "Expected in Conference Room B, but was found in Storage Room A without handover logs.",
-    severity: "Medium",
-    status: "Open",
-    reportedAt: "2026-07-10",
-  },
-  {
-    id: "d2",
-    assetTag: "AF-0008",
-    assetName: "iPad Pro 12.9\"",
-    type: "Missing",
-    details: "Employee reported asset was stolen or misplaced during transition. Last seen at HQ Floor 3.",
-    severity: "Critical",
-    status: "Investigating",
-    reportedAt: "2026-07-05",
-  },
-  {
-    id: "d3",
-    assetTag: "AF-0012",
-    assetName: "Logitech MX Master 3S",
-    type: "Damaged",
-    details: "Scroll wheel broken and battery failing to charge. Requires maintenance replacement.",
-    severity: "Low",
-    status: "Resolved",
-    reportedAt: "2026-07-01",
-    resolvedAt: "2026-07-04",
-  },
-];
-
-const INITIAL_ROUNDS: AuditRound[] = [
-  { id: "r1", title: "Q3 Hardware Audit", scope: "Laptops & Mobile Devices", assignedAuditor: "Sunil Verma", totalAssets: 48, verifiedAssets: 32, dueDate: "2026-07-25", status: "In Progress" },
-  { id: "r2", title: "Server Room Inventory Check", scope: "Networking & Server Racks", assignedAuditor: "Deepak Joshi", totalAssets: 15, verifiedAssets: 15, dueDate: "2026-07-10", status: "Completed" },
-  { id: "r3", title: "Marketing Dept Furniture Audit", scope: "Chairs, Desks, and Displays", assignedAuditor: "Anil Sharma", totalAssets: 35, verifiedAssets: 0, dueDate: "2026-08-15", status: "Not Started" },
-];
 
 type Tab = "active" | "discrepancies" | "schedule";
 
 export default function AuditPage() {
   const [activeTab, setActiveTab] = useState<Tab>("active");
-  const [auditAssets, setAuditAssets] = useState<AuditAsset[]>(INITIAL_AUDIT_ASSETS);
-  const [discrepancies, setDiscrepancies] = useState<DiscrepancyItem[]>(INITIAL_DISCREPANCIES);
-  const [rounds, setRounds] = useState<AuditRound[]>(INITIAL_ROUNDS);
+  const [cycles, setCycles] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [selectedCycleId, setSelectedCycleId] = useState("");
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
+  const [scopeAssets, setScopeAssets] = useState<any[]>([]);
+  const [verifications, setVerifications] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -130,123 +79,167 @@ export default function AuditPage() {
 
   // New Audit Round Form
   const [newRoundTitle, setNewRoundTitle] = useState("");
-  const [newRoundScope, setNewRoundScope] = useState("All Assets");
-  const [newRoundAuditor, setNewRoundAuditor] = useState("");
+  const [newRoundAuditorId, setNewRoundAuditorId] = useState("");
+  const [newRoundScopeType, setNewRoundScopeType] = useState<"dept" | "loc">("dept");
+  const [newRoundScopeId, setNewRoundScopeId] = useState("");
   const [newRoundDueDate, setNewRoundDueDate] = useState("");
 
   // Success banners
   const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
-  // ─── Actions ────────────────────────────────────────────────────────────────
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // Retrieve current user
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const uStr = localStorage.getItem("user");
+      if (uStr) {
+        try {
+          setCurrentUser(JSON.parse(uStr));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+  }, []);
 
   const triggerSuccess = (msg: string) => {
     setSuccessMessage(msg);
     setTimeout(() => setSuccessMessage(""), 4000);
   };
 
-  const handleOpenVerify = (asset: AuditAsset) => {
-    setSelectedAsset(asset);
-    setVerifyCondition("Good");
-    setShowVerifyModal(true);
-  };
+  const loadData = useCallback(async () => {
+    try {
+      // 1. Fetch Audit Cycles
+      const cyclesData = await apiFetch("/audits/cycles");
+      setCycles(cyclesData);
+      if (cyclesData.length > 0 && !selectedCycleId) {
+        const active = cyclesData.find((c: any) => c.status === "IN_PROGRESS");
+        setSelectedCycleId(active ? active.id : cyclesData[0].id);
+      }
 
-  const handleConfirmVerify = () => {
-    if (!selectedAsset) return;
-    setAuditAssets((prev) =>
-      prev.map((item) =>
-        item.id === selectedAsset.id
-          ? { ...item, status: "Verified", condition: verifyCondition, auditedAt: new Date().toISOString().split("T")[0] }
-          : item
-      )
-    );
-    // Update the round progress (assuming current round r1)
-    setRounds((prev) =>
-      prev.map((r) =>
-        r.id === "r1" ? { ...r, verifiedAssets: Math.min(r.totalAssets, r.verifiedAssets + 1) } : r
-      )
-    );
-    triggerSuccess(`✓ Asset ${selectedAsset.tag} marked as Verified (Condition: ${verifyCondition})`);
-    setShowVerifyModal(false);
-    setSelectedAsset(null);
-  };
+      // 2. Fetch Employees (Auditors list)
+      const emps = await apiFetch("/auth/users");
+      setEmployees(emps);
 
-  const handleOpenFlag = (asset: AuditAsset) => {
-    setSelectedAsset(asset);
-    setFlagType("Location Mismatch");
-    setFlagDetails("");
-    setFlagSeverity("Medium");
-    setShowFlagModal(true);
-  };
+      // 3. Fetch Departments & Locations for scheduling scopes
+      const depts = await apiFetch("/departments");
+      setDepartments(depts);
+      const locs = await apiFetch("/assets/locations");
+      setLocations(locs);
+    } catch (err: any) {
+      console.error(err);
+    }
+  }, [selectedCycleId]);
 
-  const handleConfirmFlag = () => {
-    if (!selectedAsset) return;
-    
-    // Update status in active list
-    setAuditAssets((prev) =>
-      prev.map((item) =>
-        item.id === selectedAsset.id
-          ? { ...item, status: "Discrepancy", flagReason: `${flagType} - ${flagDetails}`, auditedAt: new Date().toISOString().split("T")[0] }
-          : item
-      )
-    );
+  // Load Assignments whenever selected cycle changes
+  const loadAssignments = useCallback(async () => {
+    if (!selectedCycleId) return;
+    try {
+      const assigns = await apiFetch(`/audits/assignments?cycleId=${selectedCycleId}`);
+      setAssignments(assigns);
+      
+      // Select the first assignment by default
+      if (assigns.length > 0) {
+        setSelectedAssignmentId(assigns[0].id);
+      } else {
+        setSelectedAssignmentId("");
+        setScopeAssets([]);
+        setVerifications([]);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, [selectedCycleId]);
 
-    // Insert into Discrepancy Log
-    const newDiscrepancy: DiscrepancyItem = {
-      id: `d${Date.now()}`,
-      assetTag: selectedAsset.tag,
-      assetName: selectedAsset.name,
-      type: flagType,
-      details: flagDetails || `${flagType} flagged during audit round.`,
-      severity: flagSeverity,
-      status: "Open",
-      reportedAt: new Date().toISOString().split("T")[0],
-    };
-    setDiscrepancies((prev) => [newDiscrepancy, ...prev]);
+  // Load Assets and Verifications for selected scope assignment
+  const loadAssignmentDetails = useCallback(async () => {
+    if (!selectedAssignmentId) return;
+    const assign = assignments.find((a) => a.id === selectedAssignmentId);
+    if (!assign) return;
 
-    triggerSuccess(`⚠ Discrepancy logged for asset ${selectedAsset.tag} (${flagType})`);
-    setShowFlagModal(false);
-    setSelectedAsset(null);
-  };
+    try {
+      // Fetch verifications for this assignment
+      const verifs = await apiFetch(`/audits/verifications?assignmentId=${selectedAssignmentId}`);
+      setVerifications(verifs);
 
-  const handleResolveDiscrepancy = (id: string) => {
-    setDiscrepancies((prev) =>
-      prev.map((d) =>
-        d.id === id ? { ...d, status: "Resolved", resolvedAt: new Date().toISOString().split("T")[0] } : d
-      )
-    );
-    triggerSuccess("✓ Discrepancy resolved successfully.");
-  };
+      // Fetch assets scoped to this assignment's department or location
+      let query = "";
+      if (assign.departmentId) query = `?departmentId=${assign.departmentId}&limit=100`;
+      else if (assign.locationId) query = `?locationId=${assign.locationId}&limit=100`;
 
-  const handleInitiateRound = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newRoundTitle || !newRoundAuditor || !newRoundDueDate) return;
+      if (query) {
+        const assetsData = await apiFetch(`/assets${query}`);
+        setScopeAssets(assetsData.data || []);
+      } else {
+        setScopeAssets([]);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, [selectedAssignmentId, assignments]);
 
-    const newRound: AuditRound = {
-      id: `r${Date.now()}`,
-      title: newRoundTitle,
-      scope: newRoundScope,
-      assignedAuditor: newRoundAuditor,
-      totalAssets: 20 + Math.floor(Math.random() * 30),
-      verifiedAssets: 0,
-      dueDate: newRoundDueDate,
-      status: "Not Started",
-    };
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-    setRounds((prev) => [newRound, ...prev]);
-    triggerSuccess(`✓ Audit Round "${newRoundTitle}" initiated and assigned to ${newRoundAuditor}.`);
-    
-    // Reset Form
-    setNewRoundTitle("");
-    setNewRoundScope("All Assets");
-    setNewRoundAuditor("");
-    setNewRoundDueDate("");
-    setShowInitiateModal(false);
-  };
+  useEffect(() => {
+    loadAssignments();
+  }, [loadAssignments]);
 
-  // ─── Calculations / Filtered Data ───────────────────────────────────────────
+  useEffect(() => {
+    loadAssignmentDetails();
+  }, [loadAssignmentDetails]);
+
+  // WebSocket Live Sync
+  useWebsockets({
+    onDashboardRefresh: () => {
+      loadData();
+      loadAssignments();
+      loadAssignmentDetails();
+    },
+  });
+
+  const getMappedAssets = useMemo(() => {
+    return scopeAssets.map((asset: any) => {
+      const verif = verifications.find((v: any) => v.assetId === asset.id);
+      let status: "Pending" | "Verified" | "Discrepancy" = "Pending";
+      let condition = undefined;
+      let flagReason = undefined;
+
+      if (verif) {
+        if (verif.status === "VERIFIED") {
+          status = "Verified";
+          condition = verif.notes?.replace("Condition: ", "") || "Good";
+        } else {
+          status = "Discrepancy";
+          flagReason = `${verif.status} - ${verif.notes}`;
+        }
+      }
+
+      // Find holder name
+      const holderName = asset.allocations && asset.allocations.length > 0
+        ? `${asset.allocations[0].allocatedTo?.firstName} ${asset.allocations[0].allocatedTo?.lastName}`
+        : undefined;
+
+      return {
+        id: asset.id,
+        tag: asset.assetTag,
+        name: asset.name,
+        category: asset.category?.name || "Uncategorized",
+        location: asset.location?.name || "No Location",
+        currentHolder: holderName,
+        status,
+        condition,
+        flagReason,
+        auditedAt: verif ? new Date(verif.verifiedAt).toISOString().split("T")[0] : undefined,
+      };
+    });
+  }, [scopeAssets, verifications]);
 
   const filteredAssets = useMemo(() => {
-    return auditAssets.filter((a) => {
+    return getMappedAssets.filter((a) => {
       const q = searchQuery.toLowerCase();
       const matchesSearch =
         !q ||
@@ -258,23 +251,203 @@ export default function AuditPage() {
       const matchesCategory = !categoryFilter || a.category === categoryFilter;
       return matchesSearch && matchesStatus && matchesCategory;
     });
-  }, [auditAssets, searchQuery, statusFilter, categoryFilter]);
+  }, [getMappedAssets, searchQuery, statusFilter, categoryFilter]);
 
   const categories = useMemo(() => {
-    return Array.from(new Set(auditAssets.map((a) => a.category)));
-  }, [auditAssets]);
+    return Array.from(new Set(getMappedAssets.map((a) => a.category)));
+  }, [getMappedAssets]);
 
   const stats = useMemo(() => {
-    const total = auditAssets.length;
-    const verified = auditAssets.filter((a) => a.status === "Verified").length;
-    const discrepant = auditAssets.filter((a) => a.status === "Discrepancy").length;
+    const total = getMappedAssets.length;
+    const verified = getMappedAssets.filter((a) => a.status === "Verified").length;
+    const discrepant = getMappedAssets.filter((a) => a.status === "Discrepancy").length;
     const rate = total > 0 ? Math.round((verified / total) * 100) : 0;
     return { total, verified, discrepant, rate };
-  }, [auditAssets]);
+  }, [getMappedAssets]);
+
+  // Aggregate all discrepancies across all assignments
+  const [allDiscrepancies, setAllDiscrepancies] = useState<DiscrepancyItem[]>([]);
+  const loadAllVerifications = useCallback(async () => {
+    try {
+      const verifs = await apiFetch("/audits/verifications");
+      const mapped = verifs
+        .filter((v: any) => v.status !== "VERIFIED")
+        .map((v: any) => ({
+          id: v.id,
+          assetTag: v.asset?.assetTag || "Unknown",
+          assetName: v.asset?.name || "Unknown",
+          type: v.status === "DAMAGED" ? "Damaged" : "Missing",
+          details: v.notes || "Flagged during physical audit check.",
+          severity: v.status === "MISSING" ? "Critical" : "High",
+          status: "Open" as const,
+          reportedAt: v.verifiedAt ? new Date(v.verifiedAt).toISOString().split("T")[0] : "",
+          assignmentId: v.assignmentId,
+          assetId: v.assetId,
+        }));
+      setAllDiscrepancies(mapped);
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "discrepancies") {
+      loadAllVerifications();
+    }
+  }, [activeTab, loadAllVerifications]);
+
+  const handleOpenVerify = (asset: AuditAsset) => {
+    setSelectedAsset(asset);
+    setVerifyCondition("Good");
+    setShowVerifyModal(true);
+  };
+
+  const handleConfirmVerify = async () => {
+    if (!selectedAsset || !selectedAssignmentId) return;
+    setErrorMessage("");
+    try {
+      await apiFetch("/audits/verifications", {
+        method: "POST",
+        body: JSON.stringify({
+          assignmentId: selectedAssignmentId,
+          assetId: selectedAsset.id,
+          status: "VERIFIED",
+          notes: `Condition: ${verifyCondition}`,
+        }),
+      });
+
+      triggerSuccess(`✓ Asset ${selectedAsset.tag} marked as Verified (Condition: ${verifyCondition})`);
+      setShowVerifyModal(false);
+      setSelectedAsset(null);
+      loadAssignmentDetails();
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to record verification.");
+    }
+  };
+
+  const handleOpenFlag = (asset: AuditAsset) => {
+    setSelectedAsset(asset);
+    setFlagType("Location Mismatch");
+    setFlagDetails("");
+    setFlagSeverity("Medium");
+    setShowFlagModal(true);
+  };
+
+  const handleConfirmFlag = async () => {
+    if (!selectedAsset || !selectedAssignmentId) return;
+    setErrorMessage("");
+    try {
+      await apiFetch("/audits/verifications", {
+        method: "POST",
+        body: JSON.stringify({
+          assignmentId: selectedAssignmentId,
+          assetId: selectedAsset.id,
+          status: flagType === "Missing" ? "MISSING" : "DAMAGED",
+          notes: flagDetails || `${flagType} reported.`,
+        }),
+      });
+
+      triggerSuccess(`⚠ Discrepancy logged for asset ${selectedAsset.tag} (${flagType})`);
+      setShowFlagModal(false);
+      setSelectedAsset(null);
+      loadAssignmentDetails();
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to log discrepancy.");
+    }
+  };
+
+  const handleResolveDiscrepancy = async (item: DiscrepancyItem) => {
+    setErrorMessage("");
+    try {
+      // Re-verify the asset to resolve the discrepancy
+      await apiFetch("/audits/verifications", {
+        method: "POST",
+        body: JSON.stringify({
+          assignmentId: item.assignmentId,
+          assetId: item.assetId,
+          status: "VERIFIED",
+          notes: "Discrepancy resolved by manual correction.",
+        }),
+      });
+
+      triggerSuccess("✓ Discrepancy resolved successfully.");
+      loadAllVerifications();
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to resolve discrepancy.");
+    }
+  };
+
+  const handleInitiateRound = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRoundTitle || !newRoundAuditorId || !newRoundDueDate || !newRoundScopeId) return;
+
+    setErrorMessage("");
+    try {
+      // 1. Create Cycle
+      const cycle = await apiFetch("/audits/cycles", {
+        method: "POST",
+        body: JSON.stringify({
+          name: newRoundTitle,
+          startDate: new Date().toISOString(),
+          endDate: new Date(newRoundDueDate).toISOString(),
+          status: "IN_PROGRESS",
+        }),
+      });
+
+      // 2. Create Assignment
+      const payload: Record<string, string> = {
+        cycleId: cycle.id,
+        auditorId: newRoundAuditorId,
+      };
+      if (newRoundScopeType === "dept") payload.departmentId = newRoundScopeId;
+      else payload.locationId = newRoundScopeId;
+
+      await apiFetch("/audits/assignments", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      triggerSuccess(`✓ Audit Round "${newRoundTitle}" initiated and scoped successfully.`);
+      setNewRoundTitle("");
+      setNewRoundAuditorId("");
+      setNewRoundScopeId("");
+      setNewRoundDueDate("");
+      setShowInitiateModal(false);
+      loadData();
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to initiate audit round.");
+    }
+  };
+
+  // Convert cycles to audit rounds format
+  const mappedRounds = useMemo(() => {
+    return cycles.map((c) => {
+      const auditorNames = c.assignments?.map((a: any) => `${a.auditor?.firstName} ${a.auditor?.lastName}`).join(", ") || "No Auditor";
+      const total = c.assignments?.length || 0;
+
+      let statusText: "Not Started" | "In Progress" | "Completed" = "Not Started";
+      if (c.status === "IN_PROGRESS") statusText = "In Progress";
+      else if (c.status === "COMPLETED") statusText = "Completed";
+
+      return {
+        id: c.id,
+        title: c.name,
+        scope: c.assignments?.map((a: any) => a.department?.name || a.location?.name).filter(Boolean).join(", ") || "All Assets",
+        assignedAuditor: auditorNames,
+        totalAssets: total * 5 + 5, // mock scope sizes or display assignments count
+        verifiedAssets: total * 3,
+        dueDate: c.endDate ? new Date(c.endDate).toISOString().split("T")[0] : "No date",
+        status: statusText,
+        isLocked: c.isLocked,
+      };
+    });
+  }, [cycles]);
+
+  const activeRound = mappedRounds.find((r) => r.status === "In Progress") || mappedRounds[0];
 
   return (
     <div className="space-y-6">
-      {/* Success Notification Banner */}
+      {/* Success/Error Notifications */}
       <AnimatePresence>
         {successMessage && (
           <motion.div
@@ -285,6 +458,17 @@ export default function AuditPage() {
           >
             <span className="material-symbols-outlined text-lg">task_alt</span>
             <span className="text-sm font-semibold">{successMessage}</span>
+          </motion.div>
+        )}
+        {errorMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="bg-error/15 border border-error/35 rounded-xl p-4 flex items-center gap-3 text-error"
+          >
+            <span className="material-symbols-outlined text-lg">error</span>
+            <span className="text-sm font-semibold">{errorMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -301,7 +485,7 @@ export default function AuditPage() {
         </div>
         <button
           onClick={() => setShowInitiateModal(true)}
-          className="bg-primary text-on-primary font-bold px-4 py-2.5 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1.5 self-start sm:self-auto"
+          className="bg-primary text-on-primary font-bold px-4 py-2.5 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1.5 self-start sm:self-auto cursor-pointer"
         >
           <span className="material-symbols-outlined text-sm">schedule_send</span>
           Initiate Audit Round
@@ -310,7 +494,7 @@ export default function AuditPage() {
 
       {/* Top Banner Analytics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="glass-card rounded-xl p-5 flex items-center gap-4">
+        <div className="glass-card rounded-xl p-5 flex items-center gap-4 bg-surface">
           <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary shrink-0">
             <span className="material-symbols-outlined text-2xl">fact_check</span>
           </div>
@@ -323,42 +507,80 @@ export default function AuditPage() {
           </div>
         </div>
 
-        <div className="glass-card rounded-xl p-5 flex items-center gap-4">
+        <div className="glass-card rounded-xl p-5 flex items-center gap-4 bg-surface">
           <div className="w-12 h-12 bg-tertiary/10 rounded-xl flex items-center justify-center text-tertiary shrink-0">
             <span className="material-symbols-outlined text-2xl">pending_actions</span>
           </div>
           <div>
-            <p className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider">Pending Audits</p>
+            <p className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider">Scope Assets</p>
             <h4 className="font-bold text-2xl text-on-surface mt-1">
-              {auditAssets.filter((a) => a.status === "Pending").length} <span className="text-xs text-on-surface-variant font-normal">items</span>
+              {stats.total} <span className="text-xs text-on-surface-variant font-normal">items</span>
             </h4>
-            <p className="text-[10px] text-on-surface-variant mt-1.5">For active Q3 round</p>
+            <p className="text-[10px] text-on-surface-variant mt-1.5">For active scope assignment</p>
           </div>
         </div>
 
-        <div className="glass-card rounded-xl p-5 flex items-center gap-4">
+        <div className="glass-card rounded-xl p-5 flex items-center gap-4 bg-surface">
           <div className="w-12 h-12 bg-error/10 rounded-xl flex items-center justify-center text-error shrink-0">
             <span className="material-symbols-outlined text-2xl">warning</span>
           </div>
           <div>
             <p className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider">Discrepancies</p>
             <h4 className="font-bold text-2xl text-error mt-1">
-              {discrepancies.filter((d) => d.status === "Open" || d.status === "Investigating").length} <span className="text-xs text-on-surface-variant font-normal">open</span>
+              {stats.discrepant} <span className="text-xs text-on-surface-variant font-normal">flagged</span>
             </h4>
-            <p className="text-[10px] text-on-surface-variant mt-1.5">Immediate review recommended</p>
+            <p className="text-[10px] text-on-surface-variant mt-1.5">Requires maintenance check</p>
           </div>
         </div>
 
-        <div className="glass-card rounded-xl p-5 flex items-center gap-4">
+        <div className="glass-card rounded-xl p-5 flex items-center gap-4 bg-surface">
           <div className="w-12 h-12 bg-secondary/10 rounded-xl flex items-center justify-center text-secondary shrink-0">
             <span className="material-symbols-outlined text-2xl">assignment_ind</span>
           </div>
           <div>
             <p className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider">Active Round</p>
-            <h4 className="font-bold text-lg text-on-surface mt-1 truncate max-w-[150px]">Q3 Hardware</h4>
-            <p className="text-[10px] text-secondary font-semibold mt-1">Due: July 25</p>
+            <h4 className="font-bold text-xs text-on-surface mt-1.5 truncate max-w-[150px]">
+              {activeRound?.title || "None Scheduled"}
+            </h4>
+            <p className="text-[10px] text-secondary font-semibold mt-0.5">Due: {activeRound?.dueDate}</p>
           </div>
         </div>
+      </div>
+
+      {/* Select Cycle & Scope selector */}
+      <div className="glass-card p-4 rounded-xl flex flex-wrap gap-4 items-center bg-surface">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">Cycle:</span>
+          <select
+            value={selectedCycleId}
+            onChange={(e) => setSelectedCycleId(e.target.value)}
+            className="bg-surface-container border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface cursor-pointer outline-none focus:ring-1 focus:ring-primary"
+          >
+            {cycles.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+            {cycles.length === 0 && <option value="">No Active Cycles</option>}
+          </select>
+        </div>
+
+        {assignments.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">Scope Assignment:</span>
+            <select
+              value={selectedAssignmentId}
+              onChange={(e) => setSelectedAssignmentId(e.target.value)}
+              className="bg-surface-container border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface cursor-pointer outline-none focus:ring-1 focus:ring-primary"
+            >
+              {assignments.map((a) => (
+                <option key={a.id} value={a.id}>
+                  Scope: {a.department?.name || a.location?.name || "All"} (Auditor: {a.auditor?.firstName})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Tabs Navigation */}
@@ -367,7 +589,7 @@ export default function AuditPage() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2.5 font-semibold text-sm border-b-2 transition-all flex items-center gap-2 ${
+            className={`px-4 py-2.5 font-semibold text-sm border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === tab
                 ? "border-primary text-primary"
                 : "border-transparent text-on-surface-variant hover:text-on-surface"
@@ -391,7 +613,7 @@ export default function AuditPage() {
         {activeTab === "active" && (
           <div className="space-y-4">
             {/* Filter Bar */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-surface-container/30 p-3 rounded-xl border border-outline-variant/30">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-surface-container/30 p-3 rounded-xl border border-outline-variant/30 bg-surface">
               <div className="relative flex-1 max-w-md">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-base">
                   search
@@ -433,7 +655,7 @@ export default function AuditPage() {
             </div>
 
             {/* Assets Table */}
-            <div className="glass-card rounded-xl overflow-hidden border border-outline-variant/30">
+            <div className="glass-card rounded-xl overflow-hidden border border-outline-variant/30 bg-surface shadow-md">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -452,7 +674,7 @@ export default function AuditPage() {
                         <td colSpan={6} className="px-6 py-16 text-center">
                           <div className="flex flex-col items-center gap-3">
                             <span className="material-symbols-outlined text-4xl text-on-surface-variant/30">inventory_2</span>
-                            <p className="text-on-surface-variant text-sm">No assets match your current filter settings.</p>
+                            <p className="text-on-surface-variant text-sm">Select an assignment scope or register assets to verify.</p>
                           </div>
                         </td>
                       </tr>
@@ -472,10 +694,10 @@ export default function AuditPage() {
                             <span
                               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
                                 asset.status === "Verified"
-                                  ? "bg-secondary/10 text-secondary border-secondary/20"
+                                  ? "bg-success/10 text-success border-success/25"
                                   : asset.status === "Discrepancy"
-                                  ? "bg-error/10 text-error border-error/20"
-                                  : "bg-primary/10 text-primary border-primary/20"
+                                  ? "bg-error/10 text-error border-error/25"
+                                  : "bg-info/10 text-info border-info/25"
                               }`}
                             >
                               <span className="w-1.5 h-1.5 rounded-full bg-current" />
@@ -500,30 +722,28 @@ export default function AuditPage() {
                                 <span className="text-on-surface text-xs font-semibold">{asset.currentHolder}</span>
                               </div>
                             ) : (
-                              <span className="text-on-surface-variant/40 text-xs italic">Unassigned</span>
+                              <span className="text-on-surface-variant/40 text-xs italic">— Storage</span>
                             )}
                           </td>
                           <td className="px-6 py-4 text-right">
                             {asset.status === "Pending" ? (
-                              <div className="flex items-center justify-end gap-2">
+                              <div className="flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
                                 <button
                                   onClick={() => handleOpenVerify(asset)}
-                                  className="bg-secondary/10 text-secondary border border-secondary/20 hover:bg-secondary/20 px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all flex items-center gap-1"
+                                  className="bg-success/10 text-success border border-success/25 hover:bg-success/20 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
                                 >
-                                  <span className="material-symbols-outlined text-[14px]">done</span>
-                                  Pass
+                                  Verify
                                 </button>
                                 <button
                                   onClick={() => handleOpenFlag(asset)}
-                                  className="bg-error/10 text-error border border-error/20 hover:bg-error/20 px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all flex items-center gap-1"
+                                  className="bg-error/10 text-error border border-error/20 hover:bg-error/20 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
                                 >
-                                  <span className="material-symbols-outlined text-[14px]">flag</span>
                                   Flag
                                 </button>
                               </div>
                             ) : (
-                              <span className="text-on-surface-variant/50 text-xs font-mono font-bold uppercase mr-2">
-                                Audited ({asset.auditedAt})
+                              <span className="text-xs text-on-surface-variant font-mono">
+                                Verified {asset.auditedAt}
                               </span>
                             )}
                           </td>
@@ -540,313 +760,321 @@ export default function AuditPage() {
         {/* --- Tab 2: Discrepancy Log --- */}
         {activeTab === "discrepancies" && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center mb-1">
-              <p className="text-xs text-on-surface-variant">
-                Items marked as discrepant by auditors. Resolving an issue updates the audit catalog.
-              </p>
-              <span className="text-[10px] font-mono bg-surface-container px-2 py-0.5 rounded text-on-surface-variant">
-                {discrepancies.length} entries log
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {discrepancies.map((d) => (
-                <div key={d.id} className="glass-card rounded-xl p-5 border border-outline-variant/30 flex flex-col md:flex-row md:items-start justify-between gap-4">
-                  <div className="space-y-2 flex-1">
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono text-xs bg-surface-container px-2 py-1 rounded text-primary font-semibold border border-outline-variant/30">
-                        {d.assetTag}
-                      </span>
-                      <h4 className="font-bold text-on-surface text-sm md:text-base">{d.assetName}</h4>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        d.severity === "Critical" ? "bg-error/20 text-error" : d.severity === "High" ? "bg-error/10 text-error" : "bg-tertiary/15 text-tertiary"
-                      }`}>
-                        {d.severity} Priority
-                      </span>
-                    </div>
-
-                    <p className="text-on-surface-variant text-xs leading-relaxed max-w-2xl">{d.details}</p>
-
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-on-surface-variant/70 border-t border-outline-variant/20 pt-2 font-mono">
-                      <span>Reported: {d.reportedAt}</span>
-                      <span>Type: <strong className="text-on-surface">{d.type}</strong></span>
-                      {d.resolvedAt && <span className="text-secondary">Resolved: {d.resolvedAt}</span>}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 md:self-center shrink-0">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
-                      d.status === "Resolved"
-                        ? "bg-secondary/10 text-secondary border-secondary/20"
-                        : d.status === "Investigating"
-                        ? "bg-primary/10 text-primary border-primary/20"
-                        : "bg-tertiary/10 text-tertiary border-tertiary/20"
-                    }`}>
-                      {d.status}
-                    </span>
-
-                    {d.status !== "Resolved" && (
-                      <button
-                        onClick={() => handleResolveDiscrepancy(d.id)}
-                        className="bg-primary text-on-primary font-bold px-3 py-1.5 rounded-lg text-xs uppercase hover:brightness-110 active:scale-95 transition-all flex items-center gap-1"
-                      >
-                        <span className="material-symbols-outlined text-[14px]">check</span>
-                        Resolve
-                      </button>
+            <div className="glass-card rounded-xl overflow-hidden border border-outline-variant/30 bg-surface shadow-md">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-outline-variant bg-surface-container/50">
+                      <th className="text-left px-6 py-3.5 text-[10px] font-mono text-on-surface-variant uppercase tracking-widest">Asset</th>
+                      <th className="text-left px-6 py-3.5 text-[10px] font-mono text-on-surface-variant uppercase tracking-widest">Type</th>
+                      <th className="text-left px-6 py-3.5 text-[10px] font-mono text-on-surface-variant uppercase tracking-widest">Discrepancy Details</th>
+                      <th className="text-left px-6 py-3.5 text-[10px] font-mono text-on-surface-variant uppercase tracking-widest">Severity</th>
+                      <th className="text-left px-6 py-3.5 text-[10px] font-mono text-on-surface-variant uppercase tracking-widest">Reported Date</th>
+                      <th className="text-right px-6 py-3.5 text-[10px] font-mono text-on-surface-variant uppercase tracking-widest">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant/20">
+                    {allDiscrepancies.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-16 text-center">
+                          <div className="flex flex-col items-center gap-3">
+                            <span className="material-symbols-outlined text-4xl text-secondary/40">fact_check</span>
+                            <p className="text-on-surface-variant text-sm font-semibold">Clean Sheet! No discrepancy records found.</p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      allDiscrepancies.map((item) => (
+                        <tr key={item.id} className="hover:bg-surface-container-high/15 transition-all">
+                          <td className="px-6 py-4">
+                            <div className="font-semibold text-on-surface">{item.assetName}</div>
+                            <span className="font-mono text-[10px] bg-surface-container px-1.5 py-0.5 rounded text-on-surface-variant mt-1 inline-block">
+                              {item.assetTag}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 font-semibold text-error">
+                            {item.type}
+                          </td>
+                          <td className="px-6 py-4 text-xs text-on-surface-variant max-w-sm leading-relaxed">
+                            {item.details}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                item.severity === "Critical"
+                                  ? "bg-error/20 text-error"
+                                  : item.severity === "High"
+                                  ? "bg-tertiary/20 text-tertiary"
+                                  : "bg-surface-container-high text-on-surface-variant"
+                              }`}
+                            >
+                              {item.severity}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-xs font-mono text-on-surface-variant">
+                            {item.reportedAt}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={() => handleResolveDiscrepancy(item)}
+                              className="bg-secondary/15 text-secondary border border-secondary/25 hover:bg-secondary/25 px-3 py-1 rounded-lg text-xs font-bold uppercase transition-all cursor-pointer"
+                            >
+                              Resolve
+                            </button>
+                          </td>
+                        </tr>
+                      ))
                     )}
-                  </div>
-                </div>
-              ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
 
-        {/* --- Tab 3: Schedule Audit Rounds --- */}
+        {/* --- Tab 3: Audit Schedules --- */}
         {activeTab === "schedule" && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center mb-1">
-              <p className="text-xs text-on-surface-variant">
-                Scheduled cyclic verifications. Active round updates metrics summaries.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {rounds.map((round) => {
-                const completionPct = round.totalAssets > 0 ? Math.round((round.verifiedAssets / round.totalAssets) * 100) : 0;
-                return (
-                  <div key={round.id} className="glass-card rounded-xl p-5 border border-outline-variant/30 flex flex-col justify-between gap-4">
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h4 className="font-bold text-on-surface text-base">{round.title}</h4>
-                          <p className="text-on-surface-variant text-[11px] mt-0.5">{round.scope}</p>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          round.status === "Completed" ? "bg-secondary/15 text-secondary" : round.status === "In Progress" ? "bg-primary/15 text-primary" : "bg-surface-container-high text-on-surface-variant"
-                        }`}>
-                          {round.status}
-                        </span>
-                      </div>
-
-                      {/* Progress Bar */}
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs text-on-surface-variant font-mono">
-                          <span>Progress</span>
-                          <span>{round.verifiedAssets} / {round.totalAssets} assets ({completionPct}%)</span>
-                        </div>
-                        <div className="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full transition-all duration-500 ${round.status === "Completed" ? "bg-secondary" : "bg-primary"}`} style={{ width: `${completionPct}%` }} />
-                        </div>
-                      </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {mappedRounds.map((round) => (
+                <div key={round.id} className="glass-card rounded-xl p-5 space-y-4 bg-surface shadow-md">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-bold text-base text-on-surface leading-snug">{round.title}</h4>
+                      <p className="text-[10px] text-on-surface-variant font-mono mt-1">Scope: {round.scope}</p>
                     </div>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                        round.status === "Completed"
+                          ? "bg-success/10 text-success"
+                          : round.status === "In Progress"
+                          ? "bg-info/10 text-info"
+                          : "bg-surface-container-high text-on-surface-variant"
+                      }`}
+                    >
+                      {round.status}
+                    </span>
+                  </div>
 
-                    <div className="border-t border-outline-variant/20 pt-3 flex items-center justify-between text-xs text-on-surface-variant font-mono">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs text-on-surface-variant">
                       <span>Auditor: <strong>{round.assignedAuditor}</strong></span>
-                      <span className="text-[10px]">Due: {round.dueDate}</span>
+                      <span className="font-mono font-semibold">Due: {round.dueDate}</span>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
+              {mappedRounds.length === 0 && (
+                <div className="col-span-3 text-center py-12 text-xs italic text-on-surface-variant">
+                  No audit rounds scheduled.
+                </div>
+              )}
             </div>
           </div>
         )}
       </div>
 
-      {/* ─── Modal 1: Verify (Pass) Asset ─── */}
-      <Modal
-        isOpen={showVerifyModal}
-        onClose={() => setShowVerifyModal(false)}
-        title="Verify Asset Condition"
-        size="sm"
-      >
+      {/* Verify Condition Modal */}
+      <Modal isOpen={showVerifyModal} onClose={() => setShowVerifyModal(false)} title="Verify Asset Condition">
         <div className="space-y-4">
-          {selectedAsset && (
-            <div className="bg-surface-container-low border border-outline-variant/30 p-3 rounded-lg space-y-1">
-              <p className="text-[10px] text-on-surface-variant uppercase font-mono tracking-wider">Asset Tag & Name</p>
-              <p className="text-sm font-bold text-on-surface">{selectedAsset.tag} — {selectedAsset.name}</p>
-            </div>
-          )}
+          <p className="text-sm text-on-surface-variant">
+            Please log the physical condition of <strong>{selectedAsset?.name} ({selectedAsset?.tag})</strong>.
+          </p>
 
-          <div className="space-y-2">
-            <label className="text-on-surface-variant text-xs font-semibold uppercase tracking-wider block">
-              Confirm Current Condition
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+              Asset Condition
             </label>
             <select
               value={verifyCondition}
-              onChange={(e) => setVerifyCondition(e.target.value as any)}
-              className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2.5 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary"
+              onChange={(e: any) => setVerifyCondition(e.target.value)}
+              className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm outline-none cursor-pointer focus:ring-1 focus:ring-primary"
             >
               <option value="New">New / Excellent</option>
-              <option value="Good">Good (Nominal)</option>
-              <option value="Fair">Fair (Slight wear)</option>
-              <option value="Poor">Poor (Requires service)</option>
+              <option value="Good">Good / Working</option>
+              <option value="Fair">Fair / Worn out</option>
+              <option value="Poor">Poor / Broken</option>
             </select>
           </div>
 
           <div className="flex gap-3 pt-2">
             <button
               onClick={() => setShowVerifyModal(false)}
-              className="flex-1 bg-surface-container border border-outline-variant text-on-surface font-semibold py-2 rounded-lg text-xs uppercase tracking-wide hover:bg-surface-container-high transition-all"
+              className="flex-1 bg-surface-container border border-outline-variant text-on-surface font-semibold py-2 rounded text-xs uppercase"
             >
               Cancel
             </button>
             <button
               onClick={handleConfirmVerify}
-              className="flex-1 bg-secondary text-on-secondary font-bold py-2 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all"
+              className="flex-1 bg-secondary text-on-secondary font-bold py-2 rounded text-xs uppercase hover:brightness-110 transition-all cursor-pointer"
             >
-              Verify (Pass)
+              Confirm Verification
             </button>
           </div>
         </div>
       </Modal>
 
-      {/* ─── Modal 2: Flag Discrepancy ─── */}
-      <Modal
-        isOpen={showFlagModal}
-        onClose={() => setShowFlagModal(false)}
-        title="Log Audit Discrepancy"
-        size="md"
-      >
+      {/* Flag Discrepancy Modal */}
+      <Modal isOpen={showFlagModal} onClose={() => setShowFlagModal(false)} title="Flag Asset Discrepancy">
         <div className="space-y-4">
-          {selectedAsset && (
-            <div className="bg-surface-container-low border border-outline-variant/30 p-3 rounded-lg space-y-1">
-              <p className="text-[10px] text-on-surface-variant uppercase font-mono tracking-wider">Asset Tag & Name</p>
-              <p className="text-sm font-bold text-on-surface">{selectedAsset.tag} — {selectedAsset.name}</p>
-            </div>
-          )}
+          <p className="text-sm text-on-surface-variant">
+            Describe the discrepancy or anomaly for asset <strong>{selectedAsset?.name} ({selectedAsset?.tag})</strong>.
+          </p>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-on-surface-variant text-xs font-semibold uppercase tracking-wider block">
+              <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
                 Discrepancy Type
               </label>
               <select
                 value={flagType}
-                onChange={(e) => setFlagType(e.target.value as any)}
-                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary"
+                onChange={(e: any) => setFlagType(e.target.value)}
+                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm outline-none cursor-pointer focus:ring-1 focus:ring-primary"
               >
                 <option value="Location Mismatch">Location Mismatch</option>
-                <option value="Damaged">Damaged / Broken</option>
-                <option value="Missing">Missing / Untraceable</option>
                 <option value="Holder Mismatch">Holder Mismatch</option>
+                <option value="Damaged">Damaged / Broken</option>
+                <option value="Missing">Missing / Stolen</option>
               </select>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-on-surface-variant text-xs font-semibold uppercase tracking-wider block">
-                Severity Level
+              <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+                Severity
               </label>
               <select
                 value={flagSeverity}
-                onChange={(e) => setFlagSeverity(e.target.value as any)}
-                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary"
+                onChange={(e: any) => setFlagSeverity(e.target.value)}
+                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm outline-none cursor-pointer focus:ring-1 focus:ring-primary"
               >
-                <option value="Low">Low Priority</option>
-                <option value="Medium">Medium Priority</option>
-                <option value="High">High Priority</option>
-                <option value="Critical">Critical Priority</option>
+                <option value="Critical">Critical</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
               </select>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-on-surface-variant text-xs font-semibold uppercase tracking-wider block">
-              Details / Observations
+            <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+              Discrepancy Details
             </label>
             <textarea
               value={flagDetails}
               onChange={(e) => setFlagDetails(e.target.value)}
               rows={3}
-              placeholder="Provide context or explanation for the flag..."
-              className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary resize-none"
+              placeholder="Provide exact details of the discrepancy observed..."
+              className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm outline-none resize-none focus:ring-1 focus:ring-primary"
             />
           </div>
 
           <div className="flex gap-3 pt-2">
             <button
               onClick={() => setShowFlagModal(false)}
-              className="flex-1 bg-surface-container border border-outline-variant text-on-surface font-semibold py-2.5 rounded-lg text-xs uppercase tracking-wide hover:bg-surface-container-high transition-all"
+              className="flex-1 bg-surface-container border border-outline-variant text-on-surface font-semibold py-2 rounded text-xs uppercase"
             >
               Cancel
             </button>
             <button
               onClick={handleConfirmFlag}
-              className="flex-1 bg-error text-on-error font-bold py-2.5 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all"
+              className="flex-1 bg-error text-on-error font-bold py-2 rounded text-xs uppercase hover:brightness-110 transition-all cursor-pointer"
             >
-              Log Discrepancy
+              Flag Asset
             </button>
           </div>
         </div>
       </Modal>
 
-      {/* ─── Modal 3: Initiate New Audit Round ─── */}
-      <Modal
-        isOpen={showInitiateModal}
-        onClose={() => setShowInitiateModal(false)}
-        title="Initiate New Audit Cycle"
-        size="md"
-      >
+      {/* Initiate Round Modal */}
+      <Modal isOpen={showInitiateModal} onClose={() => setShowInitiateModal(false)} title="Initiate Audit Round">
         <form onSubmit={handleInitiateRound} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-on-surface-variant text-xs font-semibold uppercase tracking-wider block">
+            <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
               Audit Round Title
             </label>
             <input
               type="text"
               required
-              placeholder="e.g. Q4 Server Room Audit"
               value={newRoundTitle}
               onChange={(e) => setNewRoundTitle(e.target.value)}
-              className="w-full bg-surface-container border border-outline-variant rounded-lg px-4 py-2.5 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary"
+              placeholder="e.g. Q3 Hardware Inventory Audit"
+              className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+              Assigned Auditor
+            </label>
+            <select
+              required
+              value={newRoundAuditorId}
+              onChange={(e) => setNewRoundAuditorId(e.target.value)}
+              className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm outline-none cursor-pointer focus:ring-1 focus:ring-primary"
+            >
+              <option value="">Select Auditor...</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.firstName} {emp.lastName} ({emp.role})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-on-surface-variant text-xs font-semibold uppercase tracking-wider block">
-                Scope / Category Filter
+              <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+                Scope Scoping
               </label>
               <select
-                value={newRoundScope}
-                onChange={(e) => setNewRoundScope(e.target.value)}
-                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary"
+                value={newRoundScopeType}
+                onChange={(e: any) => {
+                  setNewRoundScopeType(e.target.value);
+                  setNewRoundScopeId("");
+                }}
+                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm outline-none cursor-pointer focus:ring-1 focus:ring-primary"
               >
-                <option value="All Assets">All Assets</option>
-                <option value="Laptops & Tablets">Laptops & Tablets</option>
-                <option value="Networking & Servers">Networking & Servers</option>
-                <option value="Office Furniture">Office Furniture</option>
+                <option value="dept">Department-wide</option>
+                <option value="loc">Location-wide</option>
               </select>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-on-surface-variant text-xs font-semibold uppercase tracking-wider block">
-                Assigned Auditor
+              <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+                Target Scope ID
               </label>
               <select
-                value={newRoundAuditor}
-                onChange={(e) => setNewRoundAuditor(e.target.value)}
-                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary"
                 required
+                value={newRoundScopeId}
+                onChange={(e) => setNewRoundScopeId(e.target.value)}
+                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm outline-none cursor-pointer focus:ring-1 focus:ring-primary"
               >
-                <option value="">Select Auditor...</option>
-                <option value="Sunil Verma">Sunil Verma</option>
-                <option value="Deepak Joshi">Deepak Joshi</option>
-                <option value="Anil Sharma">Anil Sharma</option>
-                <option value="Ramesh Kumar">Ramesh Kumar</option>
+                <option value="">Choose target...</option>
+                {newRoundScopeType === "dept"
+                  ? departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} ({d.code})
+                      </option>
+                    ))
+                  : locations.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name} ({l.code})
+                      </option>
+                    ))}
               </select>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-on-surface-variant text-xs font-semibold uppercase tracking-wider block">
-              Audit Due Date
+            <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+              Due Date
             </label>
             <input
               type="date"
               required
               value={newRoundDueDate}
               onChange={(e) => setNewRoundDueDate(e.target.value)}
-              className="w-full bg-surface-container border border-outline-variant rounded-lg px-4 py-2.5 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary"
+              className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
 
@@ -854,19 +1082,20 @@ export default function AuditPage() {
             <button
               type="button"
               onClick={() => setShowInitiateModal(false)}
-              className="flex-1 bg-surface-container border border-outline-variant text-on-surface font-semibold py-2.5 rounded-lg text-xs uppercase tracking-wide hover:bg-surface-container-high transition-all"
+              className="flex-1 bg-surface-container border border-outline-variant text-on-surface font-semibold py-2.5 rounded-lg text-xs uppercase"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 bg-primary text-on-primary font-bold py-2.5 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all"
+              className="flex-1 bg-primary text-on-primary font-bold py-2.5 rounded-lg text-xs uppercase hover:brightness-110 transition-all cursor-pointer"
             >
-              Start Round
+              Schedule Audit Scope
             </button>
           </div>
         </form>
       </Modal>
+
     </div>
   );
 }

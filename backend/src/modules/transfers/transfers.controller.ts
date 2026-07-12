@@ -57,6 +57,12 @@ export class TransfersController {
     return this.transfersService.deptApprove(id);
   }
 
+  @Patch(':id/dept-reject')
+  @Roles(Role.DEPARTMENT_HEAD, Role.ADMIN)
+  deptReject(@Param('id') id: string) {
+    return this.transfersService.deptReject(id);
+  }
+
   /**
    * PATCH /transfers/:id/manager-approve
    * Restricted to ASSET_MANAGER or ADMIN.
@@ -67,6 +73,12 @@ export class TransfersController {
   @Roles(Role.ASSET_MANAGER, Role.ADMIN)
   managerApprove(@Param('id') id: string) {
     return this.transfersService.managerApprove(id);
+  }
+
+  @Patch(':id/manager-reject')
+  @Roles(Role.ASSET_MANAGER, Role.ADMIN)
+  managerReject(@Param('id') id: string) {
+    return this.transfersService.managerReject(id);
   }
 
   /** PATCH /transfers/:id/cancel — Cancel a pending transfer (requester only) */

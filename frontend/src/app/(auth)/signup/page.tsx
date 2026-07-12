@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { apiFetch } from "@/lib/api";
 
 const signupSchema = z
   .object({
@@ -83,8 +84,8 @@ function InputField({
         {...registration}
         className={`w-full bg-surface-container-low border rounded-lg px-4 py-3 text-sm text-on-surface placeholder:text-on-surface-variant/40 outline-none transition-all focus:ring-2 focus:ring-primary/50 focus:border-primary ${
           error
-            ? "border-error ring-1 ring-error/30"
-            : "border-outline-variant"
+              ? "border-error ring-1 ring-error/30"
+              : "border-outline-variant"
         }`}
       />
       {error && (
@@ -127,16 +128,11 @@ export default function SignupPage() {
         role: "EMPLOYEE" as const,
       };
 
-      // TODO: replace with real API call once Backend Developer A is ready
-      // const res = await fetch('/api/auth/signup', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(payload),
-      // });
-      // if (!res.ok) throw new Error((await res.json()).message);
+      await apiFetch("/auth/signup", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
 
-      console.log("Signup payload:", payload); // for dev verification
-      await new Promise((r) => setTimeout(r, 1200));
       setIsSuccess(true);
     } catch (err: unknown) {
       setServerError(

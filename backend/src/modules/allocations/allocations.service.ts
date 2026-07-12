@@ -16,10 +16,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAllocationDto } from './dto/create-allocation.dto';
+import { NotificationGateway } from '../gateway/notification.gateway';
 
 @Injectable()
 export class AllocationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gateway: NotificationGateway,
+  ) {}
 
   /**
    * Allocates an asset to a user.
@@ -77,6 +81,13 @@ export class AllocationsService {
       }),
     ]);
 
+    this.gateway.broadcastDashboardRefresh();
+    this.gateway.sendNotificationToUser(allocatedToId, {
+      type: 'success',
+      title: 'Asset Allocated',
+      message: `Asset ${allocation.asset.name} (${allocation.asset.assetTag}) has been allocated to you.`,
+    });
+
     return allocation;
   }
 
@@ -127,6 +138,13 @@ export class AllocationsService {
         data: { status: 'AVAILABLE' },
       }),
     ]);
+
+    this.gateway.broadcastDashboardRefresh();
+    this.gateway.sendNotificationToUser(allocation.allocatedToId, {
+      type: 'info',
+      title: 'Asset Returned',
+      message: `Your allocation for asset ID ${allocation.assetId} has been marked as returned.`,
+    });
 
     return updated;
   }

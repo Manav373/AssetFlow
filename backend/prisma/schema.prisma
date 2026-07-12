@@ -229,6 +229,7 @@ model MaintenanceRequest {
   asset            Asset                @relation(fields: [assetId], references: [id])
   title            String
   description      String
+  priority         String               @default("Medium")
   status           MaintenanceStatus    @default(RAISED)
   requestedById    String
   requestedBy      User                 @relation("Requester", fields: [requestedById], references: [id])

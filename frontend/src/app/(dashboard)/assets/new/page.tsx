@@ -1,56 +1,21 @@
 "use client";
 
-/**
- * @module NewAssetPage
- * @description Register a new asset form.
- *              Validates all required fields and posts to POST /api/assets.
- * @authors Developer 3
- * @status In-Progress (mock submit, awaiting Backend Developer A)
- */
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { apiFetch } from "@/lib/api";
 
 const newAssetSchema = z.object({
   name: z.string().min(2, "Asset name is required"),
-  category: z.string().min(1, "Category is required"),
+  categoryId: z.string().min(1, "Category is required"),
   serialNumber: z.string().optional(),
-  location: z.string().min(2, "Location is required"),
-  purchaseDate: z.string().optional(),
-  description: z.string().optional(),
+  locationId: z.string().min(1, "Location is required"),
+  isBookable: z.boolean(),
 });
 
 type NewAssetForm = z.infer<typeof newAssetSchema>;
-
-const CATEGORIES = [
-  "Laptops",
-  "Monitors",
-  "Mobile Devices",
-  "Tablets",
-  "Projectors",
-  "Printers",
-  "Servers",
-  "Networking Equipment",
-  "Furniture",
-  "Software Licenses",
-  "Other",
-];
-
-const LOCATIONS = [
-  "Storage Room A",
-  "Storage Room B",
-  "IT Floor – Desk",
-  "HR Department",
-  "Finance Department",
-  "Operations Floor",
-  "Server Room",
-  "Data Center",
-  "Conference Room",
-  "Maintenance Bay",
-];
 
 function FormField({
   id,
@@ -100,26 +65,58 @@ const inputErrorClass =
 export default function NewAssetPage() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [generatedTag, setGeneratedTag] = useState("");
+  const [categories, setCategories] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [serverError, setServerError] = useState("");
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<NewAssetForm>({ resolver: zodResolver(newAssetSchema) });
+  } = useForm<NewAssetForm>({
+    resolver: zodResolver(newAssetSchema),
+    defaultValues: {
+      name: "",
+      categoryId: "",
+      serialNumber: "",
+      locationId: "",
+      isBookable: false,
+    },
+  });
+
+  const loadFormData = async () => {
+    try {
+      const cats = await apiFetch("/categories");
+      setCategories(cats);
+      const locs = await apiFetch("/assets/locations");
+      setLocations(locs);
+    } catch (err) {
+      console.error("Error loading dropdown data:", err);
+    }
+  };
+
+  useEffect(() => {
+    loadFormData();
+  }, []);
 
   const onSubmit = async (data: NewAssetForm) => {
-    // TODO: replace with real API
-    // const res = await fetch('/api/assets', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(data),
-    // });
-
-    await new Promise((r) => setTimeout(r, 1000));
-    const mockTag = `AF-${String(Math.floor(Math.random() * 9000) + 1000)}`;
-    console.log("New asset payload:", { ...data, tag: mockTag, status: "Available" });
-    setGeneratedTag(mockTag);
-    setIsSuccess(true);
+    setServerError("");
+    try {
+      const res = await apiFetch("/assets", {
+        method: "POST",
+        body: JSON.stringify({
+          name: data.name,
+          categoryId: data.categoryId,
+          serialNumber: data.serialNumber || undefined,
+          locationId: data.locationId,
+          isBookable: data.isBookable,
+        }),
+      });
+      setGeneratedTag(res.assetTag);
+      setIsSuccess(true);
+    } catch (err: any) {
+      setServerError(err.message || "Failed to register asset. Serial number may be duplicate.");
+    }
   };
 
   if (isSuccess) {
@@ -191,6 +188,13 @@ export default function NewAssetPage() {
         </p>
       </div>
 
+      {serverError && (
+        <div className="mb-4 flex items-center gap-2.5 bg-error-container/20 border border-error/30 rounded-lg px-4 py-3 text-error text-sm">
+          <span className="material-symbols-outlined text-base shrink-0">error</span>
+          {serverError}
+        </div>
+      )}
+
       {/* Form */}
       <div className="glass-card rounded-2xl p-6 shadow-lg">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
@@ -215,17 +219,17 @@ export default function NewAssetPage() {
               id="asset-category"
               label="Category"
               required
-              error={errors.category?.message}
+              error={errors.categoryId?.message}
             >
               <select
                 id="asset-category"
-                {...register("category")}
-                className={errors.category ? inputErrorClass : inputClass}
+                {...register("categoryId")}
+                className={errors.categoryId ? inputErrorClass : inputClass}
               >
                 <option value="">Select category</option>
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
                   </option>
                 ))}
               </select>
@@ -246,57 +250,41 @@ export default function NewAssetPage() {
             </FormField>
           </div>
 
-          {/* Location & Purchase Date */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Location */}
+          <div className="grid grid-cols-1 gap-4">
             <FormField
               id="asset-location"
               label="Location"
               required
-              error={errors.location?.message}
+              error={errors.locationId?.message}
             >
               <select
                 id="asset-location"
-                {...register("location")}
-                className={errors.location ? inputErrorClass : inputClass}
+                {...register("locationId")}
+                className={errors.locationId ? inputErrorClass : inputClass}
               >
                 <option value="">Select location</option>
-                {LOCATIONS.map((l) => (
-                  <option key={l} value={l}>
-                    {l}
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
                   </option>
                 ))}
               </select>
             </FormField>
-
-            <FormField
-              id="asset-purchase-date"
-              label="Purchase Date"
-              error={errors.purchaseDate?.message}
-            >
-              <input
-                id="asset-purchase-date"
-                type="date"
-                {...register("purchaseDate")}
-                className={inputClass}
-              />
-            </FormField>
           </div>
 
-          {/* Description */}
-          <FormField
-            id="asset-description"
-            label="Description"
-            error={errors.description?.message}
-            hint="Optional — any notes about this asset"
-          >
-            <textarea
-              id="asset-description"
-              {...register("description")}
-              placeholder="Describe the asset condition, purpose, or any notes..."
-              rows={3}
-              className={`${inputClass} resize-none`}
+          {/* Bookable checkbox option */}
+          <div className="flex items-center gap-2 px-1">
+            <input
+              id="asset-bookable"
+              type="checkbox"
+              {...register("isBookable")}
+              className="w-4 h-4 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary focus:ring-1 cursor-pointer"
             />
-          </FormField>
+            <label htmlFor="asset-bookable" className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider cursor-pointer">
+              Allow scheduling / booking for this asset
+            </label>
+          </div>
 
           {/* Info Note */}
           <div className="flex items-start gap-2.5 bg-surface-container/50 border border-outline-variant/40 rounded-lg px-4 py-3">

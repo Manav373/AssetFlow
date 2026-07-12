@@ -134,11 +134,11 @@ const MOCK_ASSETS: Asset[] = [
 ];
 
 const STATUS_STYLES: Record<AssetStatus, string> = {
-  Available: "bg-primary/10 text-primary border-primary/20",
-  Allocated: "bg-secondary/10 text-secondary border-secondary/20",
-  Maintenance: "bg-tertiary/10 text-tertiary border-tertiary/20",
+  Available: "bg-success/10 text-success border-success/25",
+  Allocated: "bg-info/10 text-info border-info/25",
+  Maintenance: "bg-warning/10 text-warning border-warning/25",
   Retired: "bg-outline-variant/30 text-on-surface-variant border-outline-variant",
-  Lost: "bg-error-container/20 text-error border-error/20",
+  Lost: "bg-error/10 text-error border-error/25",
 };
 
 function InfoRow({ label, value }: { label: string; value?: string }) {

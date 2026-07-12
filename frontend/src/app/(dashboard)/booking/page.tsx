@@ -1,19 +1,12 @@
-
-/**
- * @module ResourceBooking
- * @description Interactive calendar timeline for facility bookings with collision detection.
- * @authors Developer 4
- * @status In-Progress
- * @collaboration Frontend team consumes GET /api/bookings/slots payload
- */
-
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { format, addDays, startOfWeek, isSameDay } from "date-fns";
+import { apiFetch } from "@/lib/api";
+import { useWebsockets } from "@/hooks/useWebsockets";
 
-// --- Mock Data ---
+// --- Types ---
 interface Booking {
   id: string;
   resource: string;
@@ -32,14 +25,6 @@ interface Resource {
   icon: string;
 }
 
-const RESOURCES: Resource[] = [
-  { id: "r1", name: "Conference Room A", type: "Room", icon: "meeting_room" },
-  { id: "r2", name: "Conference Room B", type: "Room", icon: "meeting_room" },
-  { id: "r3", name: "Conference Room C", type: "Room", icon: "meeting_room" },
-  { id: "r4", name: "Vehicle V-01", type: "Vehicle", icon: "directions_car" },
-  { id: "r5", name: "Lab Equipment LE-3", type: "Equipment", icon: "science" },
-];
-
 const COLORS = [
   "bg-primary/20 border-primary/40 text-primary",
   "bg-secondary/20 border-secondary/40 text-secondary",
@@ -48,22 +33,13 @@ const COLORS = [
   "bg-primary/15 border-primary/30 text-primary",
 ];
 
-const INITIAL_BOOKINGS: Booking[] = [
-  { id: "b1", resource: "r1", title: "Sprint Planning", day: 0, startHour: 9, endHour: 11, bookedBy: "Priya Shah", color: COLORS[0] },
-  { id: "b2", resource: "r1", title: "Stakeholder Sync", day: 2, startHour: 14, endHour: 15, bookedBy: "Arjun Mehta", color: COLORS[1] },
-  { id: "b3", resource: "r2", title: "Design Review", day: 1, startHour: 10, endHour: 12, bookedBy: "Neha Kapoor", color: COLORS[2] },
-  { id: "b4", resource: "r3", title: "Client Onboarding", day: 3, startHour: 13, endHour: 15, bookedBy: "Raj Patel", color: COLORS[3] },
-  { id: "b5", resource: "r4", title: "Site Visit", day: 4, startHour: 8, endHour: 12, bookedBy: "Simran Kaur", color: COLORS[4] },
-  { id: "b6", resource: "r2", title: "QA Review", day: 0, startHour: 14, endHour: 16, bookedBy: "Vikram Desai", color: COLORS[0] },
-  { id: "b7", resource: "r5", title: "Lab Calibration", day: 2, startHour: 9, endHour: 11, bookedBy: "Simran Kaur", color: COLORS[1] },
-];
-
 const HOURS = Array.from({ length: 11 }, (_, i) => 8 + i); // 8..18
 const DAYS_COUNT = 5; // Mon-Fri
 
 export default function BookingPage() {
-  const [bookings, setBookings] = useState<Booking[]>(INITIAL_BOOKINGS);
-  const [selectedResource, setSelectedResource] = useState<string>("r1");
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [selectedResource, setSelectedResource] = useState<string>("");
   const [showModal, setShowModal] = useState(false);
   const [modalSlot, setModalSlot] = useState<{ day: number; hour: number } | null>(null);
   const [formTitle, setFormTitle] = useState("");
@@ -72,12 +48,85 @@ export default function BookingPage() {
   const [formResource, setFormResource] = useState("");
   const [collision, setCollision] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
   const weekStart = useMemo(() => startOfWeek(new Date(), { weekStartsOn: 1 }), []);
   const weekDays = useMemo(
     () => Array.from({ length: DAYS_COUNT }, (_, i) => addDays(weekStart, i)),
     [weekStart]
   );
+
+  // Load resources (bookable assets)
+  const loadResources = async () => {
+    try {
+      const res = await apiFetch("/assets?isBookable=true&limit=100");
+      const mapped = res.data.map((asset: any) => ({
+        id: asset.id,
+        name: asset.name,
+        type: asset.category?.code === "ROOM" ? "Room" : asset.category?.code === "VEHICLE" ? "Vehicle" : "Equipment",
+        icon: asset.category?.code === "ROOM" ? "meeting_room" : asset.category?.code === "VEHICLE" ? "directions_car" : "science",
+      }));
+      setResources(mapped);
+      if (mapped.length > 0) {
+        setSelectedResource(mapped[0].id);
+      }
+    } catch (err) {
+      console.error("Error loading resources:", err);
+    }
+  };
+
+  // Load bookings for selected asset
+  const loadBookings = useCallback(async () => {
+    if (!selectedResource) return;
+    try {
+      const data = await apiFetch(`/bookings?assetId=${selectedResource}`);
+      const mapped = data.map((b: any, index: number) => {
+        const start = new Date(b.startTime);
+        const end = new Date(b.endTime);
+
+        // Calculate day index relative to weekStart (Monday = 0)
+        // Set hours to 0 to compare days properly
+        const startDay = new Date(start);
+        startDay.setHours(0, 0, 0, 0);
+        const refDay = new Date(weekStart);
+        refDay.setHours(0, 0, 0, 0);
+
+        const dayDiff = Math.round((startDay.getTime() - refDay.getTime()) / (1000 * 60 * 60 * 24));
+
+        return {
+          id: b.id,
+          resource: b.assetId,
+          title: `Reserved by ${b.bookedBy?.firstName || "Staff"}`,
+          day: dayDiff,
+          startHour: start.getHours(),
+          endHour: end.getHours(),
+          bookedBy: `${b.bookedBy?.firstName || ""} ${b.bookedBy?.lastName || ""}`,
+          color: COLORS[index % COLORS.length],
+        };
+      });
+      // Filter out bookings that don't fall in this week's grid representation
+      setBookings(mapped.filter((b: any) => b.day >= 0 && b.day < DAYS_COUNT));
+    } catch (err) {
+      console.error("Error loading bookings:", err);
+    }
+  }, [selectedResource, weekStart]);
+
+  // Initial load
+  useEffect(() => {
+    loadResources();
+  }, []);
+
+  // Reload bookings when selected resource changes
+  useEffect(() => {
+    loadBookings();
+  }, [selectedResource, loadBookings]);
+
+  // Real-time synchronization
+  useWebsockets({
+    onDashboardRefresh: () => {
+      loadBookings();
+    },
+  });
 
   const filteredBookings = useMemo(
     () => bookings.filter((b) => b.resource === selectedResource),
@@ -90,12 +139,10 @@ export default function BookingPage() {
   const isSlotStart = (day: number, hour: number) =>
     filteredBookings.find((b) => b.day === day && b.startHour === hour);
 
-  const checkCollision = (resource: string, day: number, start: number, end: number, excludeId?: string) =>
-    bookings.some(
+  const checkCollisionLocal = (day: number, start: number, end: number) =>
+    filteredBookings.some(
       (b) =>
-        b.resource === resource &&
         b.day === day &&
-        b.id !== excludeId &&
         start < b.endHour &&
         end > b.startHour
     );
@@ -110,45 +157,43 @@ export default function BookingPage() {
     setFormResource(selectedResource);
     setFormTitle("");
     setCollision(false);
+    setErrorMsg("");
     setShowModal(true);
   };
 
   const handleTimeChange = (start: number, end: number) => {
     setFormStartHour(start);
     setFormEndHour(end);
-    if (modalSlot) {
-      setCollision(checkCollision(formResource, modalSlot.day, start, end));
+    setCollision(checkCollisionLocal(modalSlot?.day ?? 0, start, end));
+  };
+
+  const handleSubmitBooking = async () => {
+    if (!modalSlot || collision || formEndHour <= formStartHour) return;
+
+    const start = new Date(weekDays[modalSlot.day]);
+    start.setHours(formStartHour, 0, 0, 0);
+    const end = new Date(weekDays[modalSlot.day]);
+    end.setHours(formEndHour, 0, 0, 0);
+
+    try {
+      setErrorMsg("");
+      await apiFetch("/bookings", {
+        method: "POST",
+        body: JSON.stringify({
+          assetId: formResource,
+          startTime: start.toISOString(),
+          endTime: end.toISOString(),
+        }),
+      });
+
+      setShowModal(false);
+      setSuccessMsg(`✓ Booked successfully.`);
+      setTimeout(() => setSuccessMsg(""), 3500);
+      loadBookings();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Collision or server error occurred.");
     }
   };
-
-  const handleResourceChange = (resId: string) => {
-    setFormResource(resId);
-    if (modalSlot) {
-      setCollision(checkCollision(resId, modalSlot.day, formStartHour, formEndHour));
-    }
-  };
-
-  const handleSubmitBooking = () => {
-    if (!formTitle || !modalSlot || collision) return;
-
-    const newBooking: Booking = {
-      id: `b${Date.now()}`,
-      resource: formResource,
-      title: formTitle,
-      day: modalSlot.day,
-      startHour: formStartHour,
-      endHour: formEndHour,
-      bookedBy: "You",
-      color: COLORS[Math.floor(Math.random() * COLORS.length)],
-    };
-
-    setBookings((prev) => [...prev, newBooking]);
-    setShowModal(false);
-    setSuccessMsg(`✓ "${formTitle}" booked successfully.`);
-    setTimeout(() => setSuccessMsg(""), 3500);
-  };
-
-  const currentResource = RESOURCES.find((r) => r.id === selectedResource);
 
   return (
     <div className="space-y-6">
@@ -187,7 +232,7 @@ export default function BookingPage() {
 
       {/* Resource Tabs */}
       <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-        {RESOURCES.map((r) => (
+        {resources.map((r) => (
           <button
             key={r.id}
             onClick={() => setSelectedResource(r.id)}
@@ -201,6 +246,11 @@ export default function BookingPage() {
             {r.name}
           </button>
         ))}
+        {resources.length === 0 && (
+          <div className="text-xs text-on-surface-variant italic py-2">
+            No bookable resources found. Register an asset and mark it bookable first.
+          </div>
+        )}
       </div>
 
       {/* Calendar Grid */}
@@ -250,11 +300,11 @@ export default function BookingPage() {
                   return (
                     <div
                       key={dayIdx}
-                      onClick={() => !isOccupied && handleSlotClick(dayIdx, hour)}
+                      onClick={() => !isOccupied && selectedResource && handleSlotClick(dayIdx, hour)}
                       className={`relative min-h-[52px] border-r border-outline-variant/20 last:border-r-0 transition-colors ${
                         isSameDay(weekDays[dayIdx], new Date()) ? "bg-primary/[0.02]" : ""
                       } ${
-                        !isOccupied
+                        !isOccupied && selectedResource
                           ? "hover:bg-primary/5 cursor-pointer group"
                           : ""
                       }`}
@@ -268,7 +318,7 @@ export default function BookingPage() {
                           <p className="text-[9px] opacity-70 truncate">{booking.bookedBy}</p>
                         </div>
                       )}
-                      {!isOccupied && (
+                      {!isOccupied && selectedResource && (
                         <div className="absolute inset-1 rounded-lg border-2 border-dashed border-transparent group-hover:border-primary/20 flex items-center justify-center transition-all">
                           <span className="material-symbols-outlined text-primary/0 group-hover:text-primary/30 text-sm transition-all">
                             add
@@ -299,7 +349,7 @@ export default function BookingPage() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="glass-card rounded-2xl p-6 w-full max-w-md space-y-5 shadow-2xl"
+              className="glass-card rounded-2xl p-6 w-full max-w-md space-y-5 shadow-2xl bg-surface"
             >
               <div className="flex items-center justify-between">
                 <h3 className="font-hanken font-bold text-xl text-on-surface">Book Resource</h3>
@@ -323,9 +373,9 @@ export default function BookingPage() {
                 </div>
               </div>
 
-              {/* Collision Warning */}
+              {/* Collision / Server Error Warning */}
               <AnimatePresence>
-                {collision && (
+                {(collision || errorMsg) && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
@@ -334,41 +384,11 @@ export default function BookingPage() {
                   >
                     <span className="material-symbols-outlined text-lg">warning</span>
                     <span className="text-xs font-semibold">
-                      Time slot conflict detected! This slot overlaps with an existing booking.
+                      {errorMsg || "Time slot conflict detected! This slot overlaps with an existing booking."}
                     </span>
                   </motion.div>
                 )}
               </AnimatePresence>
-
-              <div className="space-y-1.5">
-                <label className="text-on-surface-variant text-xs font-semibold uppercase tracking-wider">
-                  Booking Title
-                </label>
-                <input
-                  type="text"
-                  value={formTitle}
-                  onChange={(e) => setFormTitle(e.target.value)}
-                  placeholder="e.g., Sprint Planning"
-                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2.5 text-sm text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all placeholder:text-on-surface-variant/50"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-on-surface-variant text-xs font-semibold uppercase tracking-wider">
-                  Resource
-                </label>
-                <select
-                  value={formResource}
-                  onChange={(e) => handleResourceChange(e.target.value)}
-                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2.5 text-sm text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all appearance-none cursor-pointer"
-                >
-                  {RESOURCES.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -407,7 +427,7 @@ export default function BookingPage() {
 
               <button
                 onClick={handleSubmitBooking}
-                disabled={!formTitle || collision || formEndHour <= formStartHour}
+                disabled={collision || formEndHour <= formStartHour}
                 className="w-full bg-primary text-on-primary font-bold px-4 py-3 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <span className="material-symbols-outlined text-sm">event_available</span>

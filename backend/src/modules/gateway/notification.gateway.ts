@@ -23,9 +23,7 @@ import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
 
 // --- START: Collaborative edit by Developer 2 & Developer A ---
-// Reads the same JWT_SECRET as the Auth module's JwtStrategy.
-// Ensure Developer A keeps process.env.JWT_SECRET consistent.
-const JWT_SECRET = process.env.JWT_SECRET || 'changeme-secret';
+const JWT_SECRET = process.env.JWT_ACCESS_SECRET || 'SuperSecretAccessSecret123!';
 // --- END: Collaborative edit ---
 
 @Injectable()

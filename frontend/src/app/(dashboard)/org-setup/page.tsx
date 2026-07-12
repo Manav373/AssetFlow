@@ -1,173 +1,13 @@
 "use client";
 
-
-/**
- * @module OrgSetupPage
- * @description Organization Setup view with tabbed layout.
- *              Tabs: Departments | Asset Categories | Employees
- *              Includes "Add Department" modal trigger.
- * @authors Developer 3
- * @status In-Progress (mock data; awaiting GET /api/departments, /api/employees)
- * @collaboration Backend Developer A: GET /api/departments, GET /api/assets/categories
- */
-
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Modal from "@/components/ui/Modal";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { apiFetch } from "@/lib/api";
+import { useWebsockets } from "@/hooks/useWebsockets";
 import type { Department, AssetCategory, Employee } from "@/types/api";
-
-// ─── Mock Data ───────────────────────────────────────────────────────────────
-
-const MOCK_DEPARTMENTS: Department[] = [
-  {
-    id: "1",
-    code: "IT",
-    name: "Information Technology",
-    headOfDepartment: "Rahul Mehta",
-    status: "Active",
-  },
-  {
-    id: "2",
-    code: "HR",
-    name: "Human Resources",
-    headOfDepartment: "Anjali Verma",
-    status: "Active",
-  },
-  {
-    id: "3",
-    code: "FIN",
-    name: "Finance & Accounts",
-    headOfDepartment: "Vikram Nair",
-    status: "Active",
-  },
-  {
-    id: "4",
-    code: "OPS",
-    name: "Operations",
-    headOfDepartment: "Sneha Kapoor",
-    status: "Active",
-  },
-  {
-    id: "5",
-    code: "MKT",
-    name: "Marketing",
-    headOfDepartment: "Arjun Singh",
-    status: "Inactive",
-  },
-];
-
-const MOCK_CATEGORIES: AssetCategory[] = [
-  {
-    id: "1",
-    name: "Electronics",
-    children: [
-      {
-        id: "1a",
-        name: "Laptops",
-        parentId: "1",
-        children: [
-          { id: "1a1", name: "MacBooks", parentId: "1a" },
-          { id: "1a2", name: "ThinkPads", parentId: "1a" },
-        ],
-      },
-      {
-        id: "1b",
-        name: "Mobile Devices",
-        parentId: "1",
-        children: [
-          { id: "1b1", name: "Smartphones", parentId: "1b" },
-          { id: "1b2", name: "Tablets", parentId: "1b" },
-        ],
-      },
-      { id: "1c", name: "Projectors", parentId: "1" },
-    ],
-  },
-  {
-    id: "2",
-    name: "Furniture",
-    children: [
-      { id: "2a", name: "Desks", parentId: "2" },
-      { id: "2b", name: "Chairs", parentId: "2" },
-      { id: "2c", name: "Cabinets", parentId: "2" },
-    ],
-  },
-  {
-    id: "3",
-    name: "Networking Equipment",
-    children: [
-      { id: "3a", name: "Routers", parentId: "3" },
-      { id: "3b", name: "Switches", parentId: "3" },
-      { id: "3c", name: "Access Points", parentId: "3" },
-    ],
-  },
-  {
-    id: "4",
-    name: "Software Licenses",
-    children: [
-      { id: "4a", name: "Productivity", parentId: "4" },
-      { id: "4b", name: "Security", parentId: "4" },
-    ],
-  },
-];
-
-const MOCK_EMPLOYEES: Employee[] = [
-  {
-    id: "1",
-    employeeId: "EMP-001",
-    name: "Priya Shah",
-    department: "IT",
-    isActive: true,
-    email: "priya.shah@company.com",
-    role: "EMPLOYEE",
-  },
-  {
-    id: "2",
-    employeeId: "EMP-002",
-    name: "Rahul Mehta",
-    department: "IT",
-    isActive: true,
-    email: "rahul.mehta@company.com",
-    role: "MANAGER",
-  },
-  {
-    id: "3",
-    employeeId: "EMP-003",
-    name: "Anjali Verma",
-    department: "HR",
-    isActive: true,
-    email: "anjali.verma@company.com",
-    role: "MANAGER",
-  },
-  {
-    id: "4",
-    employeeId: "EMP-004",
-    name: "Kunal Sharma",
-    department: "Finance",
-    isActive: false,
-    email: "kunal.sharma@company.com",
-    role: "EMPLOYEE",
-  },
-  {
-    id: "5",
-    employeeId: "EMP-005",
-    name: "Meera Pillai",
-    department: "Operations",
-    isActive: true,
-    email: "meera.pillai@company.com",
-    role: "EMPLOYEE",
-  },
-  {
-    id: "6",
-    employeeId: "EMP-006",
-    name: "Arjun Singh",
-    department: "Marketing",
-    isActive: true,
-    email: "arjun.singh@company.com",
-    role: "MANAGER",
-  },
-];
 
 // ─── Add Department Form ─────────────────────────────────────────────────────
 
@@ -178,7 +18,7 @@ const addDeptSchema = z.object({
     .max(8, "Code is too long")
     .regex(/^[A-Z]+$/, "Use uppercase letters only"),
   name: z.string().min(3, "Name must be at least 3 characters"),
-  headOfDepartment: z.string().min(2, "Head of department is required"),
+  headId: z.string().optional(),
 });
 
 type AddDeptForm = z.infer<typeof addDeptSchema>;
@@ -252,7 +92,10 @@ type Tab = "departments" | "categories" | "employees";
 export default function OrgSetupPage() {
   const [activeTab, setActiveTab] = useState<Tab>("departments");
   const [isAddDeptOpen, setIsAddDeptOpen] = useState(false);
-  const [departments, setDepartments] = useState<Department[]>(MOCK_DEPARTMENTS);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [categoriesTree, setCategoriesTree] = useState<AssetCategory[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [serverError, setServerError] = useState("");
 
   const {
     register,
@@ -261,18 +104,70 @@ export default function OrgSetupPage() {
     formState: { errors, isSubmitting },
   } = useForm<AddDeptForm>({ resolver: zodResolver(addDeptSchema) });
 
+  const loadData = useCallback(async () => {
+    try {
+      // 1. Fetch Departments
+      const depts = await apiFetch("/departments");
+      setDepartments(
+        depts.map((d: any) => ({
+          id: d.id,
+          code: d.code,
+          name: d.name,
+          headOfDepartment: d.headId && d.users ? `${d.users.firstName} ${d.users.lastName}` : "No Head Assigned",
+          status: d.isActive ? "Active" : "Inactive",
+        }))
+      );
+
+      // 2. Fetch Categories Tree
+      const tree = await apiFetch("/categories/tree");
+      setCategoriesTree(tree);
+
+      // 3. Fetch Employees (Users)
+      const users = await apiFetch("/auth/users");
+      setEmployees(
+        users.map((u: any) => ({
+          id: u.id,
+          employeeId: u.employeeId,
+          name: `${u.firstName} ${u.lastName}`,
+          department: u.department?.name || "Unassigned",
+          isActive: u.isActive,
+          email: u.email,
+          role: u.role,
+        }))
+      );
+    } catch (err: any) {
+      console.error("Error loading org setup details:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Real-time updates
+  useWebsockets({
+    onDashboardRefresh: () => {
+      loadData();
+    },
+  });
+
   const onAddDepartment = async (data: AddDeptForm) => {
-    await new Promise((r) => setTimeout(r, 600));
-    const newDept: Department = {
-      id: Date.now().toString(),
-      code: data.code,
-      name: data.name,
-      headOfDepartment: data.headOfDepartment,
-      status: "Active",
-    };
-    setDepartments((prev) => [...prev, newDept]);
-    reset();
-    setIsAddDeptOpen(false);
+    setServerError("");
+    try {
+      await apiFetch("/departments", {
+        method: "POST",
+        body: JSON.stringify({
+          code: data.code,
+          name: data.name,
+          headId: data.headId || undefined,
+        }),
+      });
+      reset();
+      setIsAddDeptOpen(false);
+      loadData();
+    } catch (err: any) {
+      setServerError(err.message || "Failed to create department. Code may be duplicate.");
+    }
   };
 
   const tabs: { key: Tab; label: string; icon: string }[] = [
@@ -297,7 +192,7 @@ export default function OrgSetupPage() {
           <button
             id="add-department-btn"
             onClick={() => setIsAddDeptOpen(true)}
-            className="bg-primary text-on-primary font-bold px-4 py-2.5 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5"
+            className="bg-primary text-on-primary font-bold px-4 py-2.5 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <span className="material-symbols-outlined text-sm">add</span>
             Add Department
@@ -314,7 +209,7 @@ export default function OrgSetupPage() {
               key={tab.key}
               id={`tab-${tab.key}`}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-all relative ${
+              className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-all relative cursor-pointer ${
                 activeTab === tab.key
                   ? "text-primary"
                   : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/20"
@@ -330,7 +225,7 @@ export default function OrgSetupPage() {
         </div>
 
         {/* Tab Content */}
-        <div className="p-0">
+        <div className="p-0 bg-surface">
           {/* ── Departments Tab ── */}
           {activeTab === "departments" && (
             <div>
@@ -394,6 +289,13 @@ export default function OrgSetupPage() {
                         </td>
                       </tr>
                     ))}
+                    {departments.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="text-center py-8 text-xs italic text-on-surface-variant">
+                          No departments seeded.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -411,17 +313,17 @@ export default function OrgSetupPage() {
 
           {/* ── Asset Categories Tab ── */}
           {activeTab === "categories" && (
-            <div className="p-4">
+            <div className="p-4 bg-surface">
               <div className="flex items-center justify-between mb-4 px-2">
                 <p className="text-xs text-on-surface-variant">
                   Click categories to expand or collapse their sub-items.
                 </p>
                 <span className="text-[10px] font-mono text-on-surface-variant/50">
-                  {MOCK_CATEGORIES.length} top-level categories
+                  {categoriesTree.length} top-level categories
                 </span>
               </div>
               <div className="space-y-1">
-                {MOCK_CATEGORIES.map((cat) => (
+                {categoriesTree.map((cat) => (
                   <CategoryNode key={cat.id} category={cat} />
                 ))}
               </div>
@@ -453,7 +355,7 @@ export default function OrgSetupPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant/30">
-                    {MOCK_EMPLOYEES.map((emp) => (
+                    {employees.map((emp) => (
                       <tr
                         key={emp.id}
                         className="hover:bg-surface-container-high/20 transition-all"
@@ -518,10 +420,10 @@ export default function OrgSetupPage() {
               </div>
               <div className="px-6 py-3 border-t border-outline-variant/30 flex items-center justify-between">
                 <span className="text-xs text-on-surface-variant font-mono">
-                  {MOCK_EMPLOYEES.length} employees total
+                  {employees.length} employees total
                 </span>
                 <span className="text-xs text-on-surface-variant font-mono">
-                  {MOCK_EMPLOYEES.filter((e) => e.isActive).length} active
+                  {employees.filter((e) => e.isActive).length} active
                 </span>
               </div>
             </div>
@@ -535,10 +437,18 @@ export default function OrgSetupPage() {
         onClose={() => {
           setIsAddDeptOpen(false);
           reset();
+          setServerError("");
         }}
         title="Add Department"
       >
         <form onSubmit={handleSubmit(onAddDepartment)} className="space-y-4" noValidate>
+          {serverError && (
+            <div className="flex items-center gap-2 bg-error/10 border border-error/25 rounded-lg px-4 py-2.5 text-error text-xs">
+              <span className="material-symbols-outlined text-xs">error_outline</span>
+              {serverError}
+            </div>
+          )}
+
           {/* Code */}
           <div className="space-y-1.5">
             <label
@@ -587,7 +497,7 @@ export default function OrgSetupPage() {
             )}
           </div>
 
-          {/* Head of Department */}
+          {/* Head of Department Dropdown */}
           <div className="space-y-1.5">
             <label
               htmlFor="dept-head"
@@ -595,20 +505,18 @@ export default function OrgSetupPage() {
             >
               Head of Department
             </label>
-            <input
+            <select
               id="dept-head"
-              {...register("headOfDepartment")}
-              placeholder="Full name"
-              className={`w-full bg-surface-container-low border rounded-lg px-4 py-3 text-sm text-on-surface placeholder:text-on-surface-variant/40 outline-none transition-all focus:ring-2 focus:ring-primary/50 focus:border-primary ${
-                errors.headOfDepartment ? "border-error" : "border-outline-variant"
-              }`}
-            />
-            {errors.headOfDepartment && (
-              <p className="text-error text-xs flex items-center gap-1">
-                <span className="material-symbols-outlined text-xs">error_outline</span>
-                {errors.headOfDepartment.message}
-              </p>
-            )}
+              {...register("headId")}
+              className="w-full bg-surface-container-low border border-outline-variant rounded-lg px-4 py-3 text-sm text-on-surface outline-none transition-all focus:ring-2 focus:ring-primary/50 focus:border-primary cursor-pointer"
+            >
+              <option value="">Select an employee (optional)</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Actions */}
@@ -618,8 +526,9 @@ export default function OrgSetupPage() {
               onClick={() => {
                 setIsAddDeptOpen(false);
                 reset();
+                setServerError("");
               }}
-              className="flex-1 bg-surface-container border border-outline-variant text-on-surface font-semibold py-2.5 rounded-lg text-sm hover:bg-surface-container-high transition-all"
+              className="flex-1 bg-surface-container border border-outline-variant text-on-surface font-semibold py-2.5 rounded-lg text-sm hover:bg-surface-container-high transition-all cursor-pointer"
             >
               Cancel
             </button>
@@ -627,7 +536,7 @@ export default function OrgSetupPage() {
               id="add-dept-submit"
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 bg-primary text-on-primary font-bold py-2.5 rounded-lg text-sm hover:brightness-110 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+              className="flex-1 bg-primary text-on-primary font-bold py-2.5 rounded-lg text-sm hover:brightness-110 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer"
             >
               {isSubmitting ? (
                 <span className="w-4 h-4 border-2 border-on-primary/30 border-t-on-primary rounded-full animate-spin" />

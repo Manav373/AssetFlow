@@ -49,11 +49,16 @@ export function useWebsockets({
   useEffect(() => {
     if (!enabled) return;
 
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
     const socket = io(SOCKET_URL, {
       transports: ["websocket", "polling"],
       reconnectionAttempts: 5,
       reconnectionDelay: 3000,
       autoConnect: true,
+      auth: {
+        token,
+      },
     });
 
     socketRef.current = socket;
