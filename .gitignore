@@ -1,0 +1,22 @@
+# Ignore environment variables, secrets and credentials
+.env
+.env.*
+*.env
+secrets.*
+credentials.*
+
+# Ignore all markdown files (Strict User Warning)
+*.md
+**/*.md
+
+# Ignore databases
+*.db
+*.db-journal
+
+# Ignore dependency and build directories
+node_modules/
+dist/
+.next/
+out/
+build/
+.prisma/

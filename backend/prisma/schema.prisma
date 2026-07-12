@@ -1,0 +1,316 @@
+// ============================================================
+// Prisma PostgreSQL Schema for AssetFlow
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ============================================================
+// Enums
+// ============================================================
+
+enum Role {
+  ADMIN
+  ASSET_MANAGER
+  DEPARTMENT_HEAD
+  EMPLOYEE
+}
+
+enum AssetStatus {
+  AVAILABLE
+  ALLOCATED
+  RESERVED
+  UNDER_MAINTENANCE
+  LOST
+  RETIRED
+  DISPOSED
+}
+
+enum AssetCondition {
+  NEW
+  GOOD
+  FAIR
+  POOR
+  DAMAGED
+  NON_FUNCTIONAL
+}
+
+enum AllocationStatus {
+  ACTIVE
+  RETURNED
+  TRANSFERRED
+}
+
+enum TransferStatus {
+  REQUESTED
+  DEPT_HEAD_APPROVED
+  DEPT_HEAD_REJECTED
+  ASSET_MANAGER_APPROVED
+  ASSET_MANAGER_REJECTED
+  TRANSFERRED
+  CANCELLED
+}
+
+enum ReturnStatus {
+  REQUESTED
+  INSPECTION_PENDING
+  INSPECTED
+  COMPLETED
+  REJECTED
+}
+
+enum BookingStatus {
+  UPCOMING
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum MaintenanceStatus {
+  RAISED
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  TECHNICIAN_ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum AuditStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AuditVerificationStatus {
+  PENDING
+  VERIFIED
+  MISSING
+  DAMAGED
+  DISCREPANCY
+}
+
+// ============================================================
+// Core Models
+// ============================================================
+
+model User {
+  id               String               @id @default(cuid())
+  employeeId       String               @unique
+  email            String               @unique
+  passwordHash     String
+  refreshTokenHash String?
+  firstName        String
+  lastName         String
+  role             Role                 @default(EMPLOYEE)
+  isActive         Boolean              @default(true)
+  departmentId     String?
+  department       Department?          @relation(fields: [departmentId], references: [id])
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  allocations      AssetAllocation[]
+  bookings         ResourceBooking[]
+  maintenances     MaintenanceRequest[] @relation("Requester")
+  assignments      MaintenanceRequest[] @relation("Technician")
+  transfers        TransferRequest[]
+  inspections      ReturnInspection[]   @relation("Inspector")
+  resetTokens      PasswordResetToken[]
+  audits           AuditAssignment[]
+}
+
+model Department {
+  id               String               @id @default(cuid())
+  name             String               @unique
+  code             String               @unique
+  headId           String?              // Department head user ID
+  isActive         Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  users            User[]
+  assets           Asset[]
+  transfers        TransferRequest[]
+  audits           AuditAssignment[]
+}
+
+model Location {
+  id               String               @id @default(cuid())
+  name             String
+  code             String               @unique
+  building         String?
+  floor            String?
+  room             String?
+  isActive         Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  assets           Asset[]
+  audits           AuditAssignment[]
+}
+
+model AssetCategory {
+  id               String               @id @default(cuid())
+  name             String
+  code             String               @unique
+  description      String?
+  parentId         String?
+  parent           AssetCategory?       @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children         AssetCategory[]      @relation("CategoryHierarchy")
+  isActive         Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  assets           Asset[]
+}
+
+model Asset {
+  id               String               @id @default(cuid())
+  assetTag         String               @unique  // Format: AF-0001
+  name             String
+  serialNumber     String?              @unique
+  categoryId       String
+  category         AssetCategory        @relation(fields: [categoryId], references: [id])
+  locationId       String?
+  location         Location?            @relation(fields: [locationId], references: [id])
+  departmentId     String?
+  department       Department?          @relation(fields: [departmentId], references: [id])
+  
+  status           AssetStatus          @default(AVAILABLE)
+  condition        AssetCondition       @default(NEW)
+  acquisitionCost  Float?
+  isBookable       Boolean              @default(false)
+  warrantyEndDate  DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  allocations      AssetAllocation[]
+  bookings         ResourceBooking[]
+  maintenances     MaintenanceRequest[]
+  transfers        TransferRequest[]
+  verifications    AuditVerification[]
+}
+
+model AssetAllocation {
+  id                 String             @id @default(cuid())
+  assetId            String
+  asset              Asset              @relation(fields: [assetId], references: [id])
+  allocatedToId      String
+  allocatedTo        User               @relation(fields: [allocatedToId], references: [id])
+  status             AllocationStatus   @default(ACTIVE)
+  allocationDate     DateTime           @default(now())
+  expectedReturnDate DateTime?
+  actualReturnDate   DateTime?
+
+  inspection         ReturnInspection?
+}
+
+model ResourceBooking {
+  id               String               @id @default(cuid())
+  assetId          String
+  asset            Asset                @relation(fields: [assetId], references: [id])
+  bookedById       String
+  bookedBy         User                 @relation(fields: [bookedById], references: [id])
+  startTime        DateTime
+  endTime          DateTime
+  status           BookingStatus        @default(UPCOMING)
+}
+
+model MaintenanceRequest {
+  id               String               @id @default(cuid())
+  assetId          String
+  asset            Asset                @relation(fields: [assetId], references: [id])
+  title            String
+  description      String
+  status           MaintenanceStatus    @default(RAISED)
+  requestedById    String
+  requestedBy      User                 @relation("Requester", fields: [requestedById], references: [id])
+  assignedToId     String?
+  assignedTo       User?                @relation("Technician", fields: [assignedToId], references: [id])
+  cost             Float?
+  resolvedAt       DateTime?
+}
+
+model TransferRequest {
+  id               String               @id @default(cuid())
+  assetId          String
+  asset            Asset                @relation(fields: [assetId], references: [id])
+  targetDeptId     String
+  targetDept       Department           @relation(fields: [targetDeptId], references: [id])
+  requestedById    String
+  requestedBy      User                 @relation(fields: [requestedById], references: [id])
+  status           TransferStatus       @default(REQUESTED)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+}
+
+model ReturnInspection {
+  id               String               @id @default(cuid())
+  allocationId     String               @unique
+  allocation       AssetAllocation      @relation(fields: [allocationId], references: [id])
+  status           ReturnStatus         @default(REQUESTED)
+  inspectorId      String?
+  inspector        User?                @relation("Inspector", fields: [inspectorId], references: [id])
+  condition        AssetCondition
+  notes            String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+}
+
+model PasswordResetToken {
+  id               String               @id @default(cuid())
+  token            String               @unique
+  userId           String
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt        DateTime
+  createdAt        DateTime             @default(now())
+}
+
+model AuditCycle {
+  id               String               @id @default(cuid())
+  name             String
+  status           AuditStatus          @default(PLANNED)
+  startDate        DateTime
+  endDate          DateTime?
+  isLocked         Boolean              @default(false)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  assignments      AuditAssignment[]
+}
+
+model AuditAssignment {
+  id               String               @id @default(cuid())
+  cycleId          String
+  cycle            AuditCycle           @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  auditorId        String
+  auditor          User                 @relation(fields: [auditorId], references: [id])
+  departmentId     String?
+  department       Department?          @relation(fields: [departmentId], references: [id])
+  locationId       String?
+  location         Location?            @relation(fields: [locationId], references: [id])
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  verifications    AuditVerification[]
+}
+
+model AuditVerification {
+  id               String                  @id @default(cuid())
+  assignmentId     String
+  assignment       AuditAssignment         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assetId          String
+  asset            Asset                   @relation(fields: [assetId], references: [id])
+  status           AuditVerificationStatus @default(PENDING)
+  notes            String?
+  verifiedAt       DateTime?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+}
