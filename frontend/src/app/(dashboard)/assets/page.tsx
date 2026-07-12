@@ -1,5 +1,6 @@
 "use client";
 
+<<<<<<< HEAD
 /**
  * @module AssetsPage
  * @description Asset directory view with filter bar, status badges, and deep-link routing.
@@ -419,6 +420,19 @@ export default function AssetsPage() {
           </div>
         </div>
       </div>
+=======
+import React from "react";
+import ComingSoon from "@/components/shared/ComingSoon";
+
+export default function AssetsPage() {
+  return (
+    <div className="py-12">
+      <ComingSoon
+        title="Asset Directory"
+        description="Register physical items, upload documentation/photos, generate unique QR/barcodes, and view active lifecycle statuses."
+        icon="inventory_2"
+      />
+>>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
     </div>
   );
 }

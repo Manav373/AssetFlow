@@ -1,7 +1,38 @@
+<<<<<<< HEAD
 "use client";
 
 import React, { useState } from "react";
 
+=======
+/**
+ * @module ReportsAnalytics
+ * @description Analytics dashboard with Recharts (Bar, Area, Pie) and export tools.
+ * @authors Developer 4
+ * @status In-Progress
+ * @collaboration Consumes analytics data from backend API endpoints
+ */
+
+"use client";
+
+import React, { useState } from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts";
+
+// --- Mock Data ---
+>>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
 interface AssetUsageItem {
   id: string;
   name: string;
@@ -21,6 +52,43 @@ interface IdleAssetItem {
   badge: string;
 }
 
+<<<<<<< HEAD
+=======
+const DEPARTMENT_DATA = [
+  { name: "Logistics", utilization: 85, capacity: 100 },
+  { name: "R&D", utilization: 62, capacity: 100 },
+  { name: "Production", utilization: 94, capacity: 100 },
+  { name: "IT Ops", utilization: 45, capacity: 100 },
+  { name: "Quality", utilization: 78, capacity: 100 },
+  { name: "Admin", utilization: 32, capacity: 100 },
+];
+
+const MAINTENANCE_DATA = [
+  { day: "Jul 1", incidents: 3, resolved: 2 },
+  { day: "Jul 3", incidents: 5, resolved: 4 },
+  { day: "Jul 5", incidents: 2, resolved: 2 },
+  { day: "Jul 7", incidents: 7, resolved: 5 },
+  { day: "Jul 9", incidents: 4, resolved: 3 },
+  { day: "Jul 11", incidents: 6, resolved: 6 },
+  { day: "Jul 13", incidents: 3, resolved: 2 },
+  { day: "Jul 15", incidents: 8, resolved: 7 },
+  { day: "Jul 17", incidents: 5, resolved: 5 },
+  { day: "Jul 19", incidents: 4, resolved: 3 },
+  { day: "Jul 21", incidents: 6, resolved: 5 },
+  { day: "Jul 23", incidents: 3, resolved: 3 },
+  { day: "Jul 25", incidents: 9, resolved: 7 },
+  { day: "Jul 27", incidents: 4, resolved: 4 },
+  { day: "Jul 29", incidents: 5, resolved: 5 },
+];
+
+const ASSET_STATUS_DATA = [
+  { name: "Available", value: 127, color: "#adc6ff" },
+  { name: "Allocated", value: 95, color: "#b7c8e1" },
+  { name: "Under Service", value: 18, color: "#ffb786" },
+  { name: "Retired", value: 12, color: "#8c909f" },
+];
+
+>>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
 const MOST_USED_ASSETS: AssetUsageItem[] = [
   {
     id: "1",
@@ -70,11 +138,35 @@ const IDLE_ASSETS: IdleAssetItem[] = [
   },
 ];
 
+<<<<<<< HEAD
 export default function ReportsPage() {
   const [viewMode, setViewMode] = useState<"live" | "historical">("live");
 
   const filterByDept = (dept: string) => {
     alert(`Filtering analytics dashboard by ${dept} Department`);
+=======
+// Custom tooltip styling
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
+  if (!active || !payload) return null;
+  return (
+    <div className="glass-card rounded-lg p-3 shadow-xl text-xs space-y-1">
+      <p className="font-semibold text-on-surface">{label}</p>
+      {payload.map((entry, i) => (
+        <p key={i} style={{ color: entry.color }} className="font-mono">
+          {entry.name}: {entry.value}
+        </p>
+      ))}
+    </div>
+  );
+};
+
+export default function ReportsPage() {
+  const [viewMode, setViewMode] = useState<"live" | "historical">("live");
+
+  const handleExport = (type: "pdf" | "excel") => {
+    const filename = `AssetFlow_Report_${new Date().toISOString().split("T")[0]}.${type === "pdf" ? "pdf" : "xlsx"}`;
+    alert(`Preparing ${type.toUpperCase()} export: ${filename}\n\n(Mock action — real export will be integrated with backend)`);
+>>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
   };
 
   return (
@@ -87,7 +179,28 @@ export default function ReportsPage() {
             Real-time performance metrics across enterprise assets.
           </p>
         </div>
+<<<<<<< HEAD
         <div className="flex gap-2">
+=======
+        <div className="flex gap-2 items-center">
+          {/* Export Buttons */}
+          <button
+            onClick={() => handleExport("pdf")}
+            className="bg-surface-container border border-outline-variant px-4 py-2 rounded-lg text-xs font-semibold hover:bg-surface-container-high transition-all flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface"
+          >
+            <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+            Export PDF
+          </button>
+          <button
+            onClick={() => handleExport("excel")}
+            className="bg-surface-container border border-outline-variant px-4 py-2 rounded-lg text-xs font-semibold hover:bg-surface-container-high transition-all flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface"
+          >
+            <span className="material-symbols-outlined text-sm">table_chart</span>
+            Export Excel
+          </button>
+
+          {/* View Mode Toggle */}
+>>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
           <div className="bg-surface-container border border-outline-variant rounded flex p-1">
             <button
               onClick={() => setViewMode("live")}
@@ -119,7 +232,11 @@ export default function ReportsPage() {
         <div
           role="region"
           aria-label="Utilization by department bar chart"
+<<<<<<< HEAD
           className="col-span-12 lg:col-span-7 bg-surface-container border border-outline-variant rounded-xl p-6 relative overflow-hidden"
+=======
+          className="col-span-12 lg:col-span-7 bg-surface-container border border-outline-variant rounded-xl p-6"
+>>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
         >
           <div className="flex justify-between items-start mb-6">
             <div>
@@ -133,6 +250,7 @@ export default function ReportsPage() {
             </button>
           </div>
 
+<<<<<<< HEAD
           {/* Simple Dynamic SVG Bar Chart */}
           <div className="h-64 flex items-end gap-3 px-4 pb-4 select-none">
             {[
@@ -161,6 +279,37 @@ export default function ReportsPage() {
               </div>
             ))}
           </div>
+=======
+          {/* --- START: Dev 4 — Recharts Bar Chart replacing SVG ---  */}
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={DEPARTMENT_DATA} barCategoryGap="20%">
+                <CartesianGrid strokeDasharray="3 3" stroke="#424754" strokeOpacity={0.3} />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fill: "#8c909f", fontSize: 11, fontWeight: 600 }}
+                  axisLine={{ stroke: "#424754" }}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fill: "#8c909f", fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  domain={[0, 100]}
+                  tickFormatter={(v) => `${v}%`}
+                />
+                <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(173,198,255,0.05)" }} />
+                <Bar
+                  dataKey="utilization"
+                  fill="#adc6ff"
+                  radius={[6, 6, 0, 0]}
+                  name="Utilization %"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          {/* --- END: Dev 4 — Recharts Bar Chart --- */}
+>>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
         </div>
 
         {/* KPI Grid */}
@@ -216,11 +365,19 @@ export default function ReportsPage() {
           </button>
         </div>
 
+<<<<<<< HEAD
         {/* Maintenance Frequency (Line Chart) */}
         <div
           role="region"
           aria-label="Maintenance frequency line chart"
           className="col-span-12 lg:col-span-8 bg-surface-container border border-outline-variant rounded-xl p-6 relative overflow-hidden min-h-[400px]"
+=======
+        {/* Maintenance Frequency (Area Chart) */}
+        <div
+          role="region"
+          aria-label="Maintenance frequency area chart"
+          className="col-span-12 lg:col-span-8 bg-surface-container border border-outline-variant rounded-xl p-6"
+>>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
         >
           <div className="flex justify-between items-center mb-6">
             <div>
@@ -238,6 +395,7 @@ export default function ReportsPage() {
             </button>
           </div>
 
+<<<<<<< HEAD
           {/* SVG Line Chart */}
           <div className="absolute inset-0 top-32 px-6 pb-6">
             <svg className="w-full h-full overflow-visible" preserveAspectRatio="none">
@@ -265,11 +423,121 @@ export default function ReportsPage() {
               <div className="border-t border-outline-variant w-full h-px"></div>
               <div className="border-t border-outline-variant w-full h-px"></div>
             </div>
+=======
+          {/* --- START: Dev 4 — Recharts Area Chart replacing SVG --- */}
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={MAINTENANCE_DATA}>
+                <defs>
+                  <linearGradient id="incidentGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#adc6ff" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#adc6ff" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="resolvedGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#b7c8e1" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#b7c8e1" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#424754" strokeOpacity={0.3} />
+                <XAxis
+                  dataKey="day"
+                  tick={{ fill: "#8c909f", fontSize: 10 }}
+                  axisLine={{ stroke: "#424754" }}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fill: "#8c909f", fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Area
+                  type="monotone"
+                  dataKey="incidents"
+                  stroke="#adc6ff"
+                  strokeWidth={2}
+                  fill="url(#incidentGrad)"
+                  name="Incidents"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="resolved"
+                  stroke="#b7c8e1"
+                  strokeWidth={2}
+                  fill="url(#resolvedGrad)"
+                  name="Resolved"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          {/* --- END: Dev 4 — Recharts Area Chart --- */}
+        </div>
+
+        {/* Asset Status Pie Chart */}
+        <div
+          role="region"
+          aria-label="Asset status allocation pie chart"
+          className="col-span-12 lg:col-span-4 bg-surface-container border border-outline-variant rounded-xl p-6"
+        >
+          <div className="mb-4">
+            <h3 className="font-semibold text-lg text-on-surface">Asset Status Split</h3>
+            <p className="text-on-surface-variant text-[10px] font-mono uppercase tracking-wider mt-1">
+              Current Distribution
+            </p>
+          </div>
+
+          {/* --- START: Dev 4 — Recharts Pie Chart --- */}
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={ASSET_STATUS_DATA}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={50}
+                  outerRadius={80}
+                  paddingAngle={4}
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {ASSET_STATUS_DATA.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend
+                  verticalAlign="bottom"
+                  height={36}
+                  formatter={(value) => (
+                    <span className="text-on-surface-variant text-xs">{value}</span>
+                  )}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          {/* --- END: Dev 4 — Recharts Pie Chart --- */}
+
+          {/* Status breakdown list */}
+          <div className="space-y-2 mt-4 border-t border-outline-variant pt-4">
+            {ASSET_STATUS_DATA.map((item) => (
+              <div key={item.name} className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: item.color }} />
+                  <span className="text-on-surface-variant">{item.name}</span>
+                </div>
+                <span className="font-mono font-bold text-on-surface">{item.value}</span>
+              </div>
+            ))}
+>>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
           </div>
         </div>
 
         {/* Right Rail: Performance Lists */}
+<<<<<<< HEAD
         <div className="col-span-12 lg:col-span-4 flex flex-col gap-4">
+=======
+        <div className="col-span-12 flex flex-col lg:flex-row gap-4">
+>>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
           {/* Most Used Assets */}
           <div className="bg-surface-container border border-outline-variant rounded-xl p-4 flex-1">
             <div className="flex justify-between items-center mb-4 border-b border-outline-variant pb-2">

@@ -1,5 +1,6 @@
 "use client";
 
+<<<<<<< HEAD
 /**
  * @module OrgSetupPage
  * @description Organization Setup view with tabbed layout.
@@ -637,6 +638,19 @@ export default function OrgSetupPage() {
           </div>
         </form>
       </Modal>
+=======
+import React from "react";
+import ComingSoon from "@/components/shared/ComingSoon";
+
+export default function OrgSetupPage() {
+  return (
+    <div className="py-12">
+      <ComingSoon
+        title="Organization Setup"
+        description="Manage company profiles, department definitions, physical locations, and hierarchical employee directories."
+        icon="corporate_fare"
+      />
+>>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
     </div>
   );
 }
