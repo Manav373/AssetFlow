@@ -6,6 +6,11 @@ import { AuthModule } from './modules/auth/auth.module';
 import { DepartmentsModule } from './modules/departments/departments.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { AssetsModule } from './modules/assets/assets.module';
+import { AllocationsModule } from './modules/allocations/allocations.module';
+import { TransfersModule } from './modules/transfers/transfers.module';
+import { BookingsModule } from './modules/bookings/bookings.module';
+import { AuditsModule } from './modules/audits/audits.module';
+import { GatewayModule } from './modules/gateway/gateway.module';
 
 @Module({
   imports: [
@@ -14,6 +19,12 @@ import { AssetsModule } from './modules/assets/assets.module';
     DepartmentsModule,
     CategoriesModule,
     AssetsModule,
+    // ── Developer 2 modules ──────────────────────────────
+    AllocationsModule,   // POST /allocations, PATCH /allocations/:id/return
+    TransfersModule,     // POST /transfers, PATCH /transfers/:id/dept-approve|manager-approve
+    BookingsModule,      // POST /bookings, GET /bookings/slots
+    AuditsModule,        // POST /audits/cycles|assignments|verifications, PATCH /audits/cycles/:id/lock
+    GatewayModule,       // Socket.IO WebSocket gateway (notification:new, dashboard:refresh)
   ],
   controllers: [AppController],
   providers: [AppService],
