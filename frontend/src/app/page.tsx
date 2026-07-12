@@ -31,27 +31,27 @@ export default function Home() {
 
         <div className="flex flex-col gap-3">
           <Link
-            href="/dashboard"
+            href="/login"
             className="w-full bg-primary text-on-primary font-bold py-3 rounded-lg text-sm hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
-            Go to Dashboard
-            <span className="material-symbols-outlined text-sm">arrow_forward</span>
+            <span className="material-symbols-outlined text-sm">login</span>
+            Sign In
           </Link>
-          
+
           <div className="flex gap-2">
             <Link
-              href="/notifications"
+              href="/signup"
               className="flex-1 bg-surface-container border border-outline-variant text-on-surface hover:bg-surface-container-high py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
             >
-              <span className="material-symbols-outlined text-xs">notifications</span>
-              Notifications
+              <span className="material-symbols-outlined text-xs">person_add</span>
+              Request Access
             </Link>
             <Link
-              href="/reports"
+              href="/dashboard"
               className="flex-1 bg-surface-container border border-outline-variant text-on-surface hover:bg-surface-container-high py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
             >
-              <span className="material-symbols-outlined text-xs">analytics</span>
-              Analytics
+              <span className="material-symbols-outlined text-xs">dashboard</span>
+              Dashboard
             </Link>
           </div>
         </div>
