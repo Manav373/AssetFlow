@@ -45,6 +45,66 @@ interface SuggestionItem {
   category: "Pages" | "Quick Filters" | "Commands";
 }
 
+const ROLE_NAV: Record<string, { href: string; icon: string; label: string }[]> = {
+  ADMIN: [
+    { href: "/dashboard", icon: "dashboard", label: "Dashboard" },
+    { href: "/org-setup", icon: "corporate_fare", label: "Org Setup" },
+    { href: "/assets", icon: "inventory_2", label: "Assets" },
+    { href: "/allocation", icon: "assignment_ind", label: "Allocation" },
+    { href: "/booking", icon: "event_available", label: "Booking" },
+    { href: "/maintenance", icon: "build", label: "Maintenance" },
+    { href: "/audit", icon: "fact_check", label: "Audit" },
+    { href: "/reports", icon: "analytics", label: "Reports" },
+    { href: "/notifications", icon: "notifications", label: "Notifications" },
+  ],
+  ASSET_MANAGER: [
+    { href: "/dashboard", icon: "dashboard", label: "Dashboard" },
+    { href: "/assets", icon: "inventory_2", label: "Assets" },
+    { href: "/allocation", icon: "assignment_ind", label: "Allocation" },
+    { href: "/booking", icon: "event_available", label: "Booking" },
+    { href: "/maintenance", icon: "build", label: "Maintenance" },
+    { href: "/audit", icon: "fact_check", label: "Audit" },
+    { href: "/reports", icon: "analytics", label: "Reports" },
+    { href: "/notifications", icon: "notifications", label: "Notifications" },
+  ],
+  DEPARTMENT_HEAD: [
+    { href: "/dashboard", icon: "dashboard", label: "Dashboard" },
+    { href: "/assets", icon: "inventory_2", label: "Assets" },
+    { href: "/allocation", icon: "assignment_ind", label: "Allocation" },
+    { href: "/booking", icon: "event_available", label: "Booking" },
+    { href: "/notifications", icon: "notifications", label: "Notifications" },
+  ],
+  EMPLOYEE: [
+    { href: "/dashboard", icon: "dashboard", label: "Dashboard" },
+    { href: "/booking", icon: "event_available", label: "Booking" },
+    { href: "/notifications", icon: "notifications", label: "Notifications" },
+  ],
+};
+
+const ROLE_ACCESS: Record<string, string[]> = {
+  ADMIN: ["/dashboard", "/org-setup", "/assets", "/allocation", "/booking", "/maintenance", "/audit", "/reports", "/notifications", "/settings", "/support"],
+  ASSET_MANAGER: ["/dashboard", "/assets", "/allocation", "/booking", "/maintenance", "/audit", "/reports", "/notifications", "/settings", "/support"],
+  DEPARTMENT_HEAD: ["/dashboard", "/assets", "/allocation", "/booking", "/notifications", "/settings", "/support"],
+  EMPLOYEE: ["/dashboard", "/booking", "/notifications", "/settings", "/support"],
+};
+
+function AccessDenied() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4 max-w-md mx-auto">
+      <div className="w-16 h-16 bg-error/10 rounded-2xl flex items-center justify-center text-error border border-error/20">
+        <span className="material-symbols-outlined text-4xl">lock</span>
+      </div>
+      <h2 className="font-hanken font-bold text-2xl text-on-surface">Access Restricted</h2>
+      <p className="text-on-surface-variant text-sm leading-relaxed">
+        Your account role does not have authorization to view this section of the workspace. Please contact your system administrator if you believe this is an error.
+      </p>
+      <Link href="/dashboard" className="bg-primary text-on-primary font-bold px-4 py-2.5 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all">
+        Go to Dashboard
+      </Link>
+    </div>
+  );
+}
+
 export default function DashboardLayout({
   children,
 }: {
@@ -56,15 +116,22 @@ export default function DashboardLayout({
   const [loading, setLoading] = useState(true);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [user, setUser] = useState<{ id: string; email: string; role: "ADMIN" | "ASSET_MANAGER" | "DEPARTMENT_HEAD" | "EMPLOYEE"; firstName: string; lastName: string } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (!token) {
+    const userStr = localStorage.getItem("user");
+    if (!token || !userStr) {
       router.push("/login");
     } else {
+      try {
+        setUser(JSON.parse(userStr));
+      } catch (e) {
+        console.error(e);
+      }
       setLoading(false);
     }
   }, [router]);
@@ -112,7 +179,6 @@ export default function DashboardLayout({
     e.preventDefault();
     if (searchQuery.trim()) {
       if (searchQuery.startsWith("/")) {
-        // Direct route short circuit
         const targetRoute = searchQuery.slice(1).trim();
         router.push(`/${targetRoute}`);
       } else {
@@ -125,7 +191,6 @@ export default function DashboardLayout({
 
   // Define static suggestions & shortcut actions
   const allSuggestions: SuggestionItem[] = [
-    // Pages / Commands
     {
       label: "Go to Dashboard",
       shortcut: "G + D",
@@ -175,7 +240,6 @@ export default function DashboardLayout({
       icon: "help",
       action: () => router.push("/support"),
     },
-    // Quick Queries / Filters
     {
       label: "Show Available Laptops",
       category: "Quick Filters",
@@ -194,14 +258,6 @@ export default function DashboardLayout({
         router.push("/assets?q=maintenance");
       },
     },
-    {
-      label: "Find Q3 Inventory Audit",
-      category: "Quick Filters",
-      icon: "search_check",
-      action: () => {
-        router.push("/audit");
-      },
-    },
   ];
 
   // Dynamically filter suggestions
@@ -213,7 +269,6 @@ export default function DashboardLayout({
     );
   });
 
-  // Handle keyboard events when dropdown is focused
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!showDropdown) {
       if (e.key === "ArrowDown" || e.key === "Enter") {
@@ -262,6 +317,12 @@ export default function DashboardLayout({
     );
   }
 
+  const role = user?.role || "EMPLOYEE";
+  const allowedPaths = ROLE_ACCESS[role] || [];
+  const isPathAllowed = allowedPaths.some(
+    (p) => pathname === p || pathname.startsWith(p + "/")
+  );
+
   return (
     <div className="flex h-screen overflow-hidden bg-background text-on-background">
       {/* SideNavBar */}
@@ -288,15 +349,9 @@ export default function DashboardLayout({
         </div>
 
         <nav className="flex-1 overflow-y-auto no-scrollbar space-y-1">
-          <NavItem href="/dashboard" icon="dashboard" label="Dashboard" />
-          <NavItem href="/org-setup" icon="corporate_fare" label="Org Setup" />
-          <NavItem href="/assets" icon="inventory_2" label="Assets" />
-          <NavItem href="/allocation" icon="assignment_ind" label="Allocation" />
-          <NavItem href="/booking" icon="event_available" label="Booking" />
-          <NavItem href="/maintenance" icon="build" label="Maintenance" />
-          <NavItem href="/audit" icon="fact_check" label="Audit" />
-          <NavItem href="/reports" icon="analytics" label="Reports" />
-          <NavItem href="/notifications" icon="notifications" label="Notifications" />
+          {(ROLE_NAV[role] || []).map((item) => (
+            <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} />
+          ))}
         </nav>
 
         <div className="mt-auto border-t border-outline-variant pt-4 space-y-1">
@@ -313,7 +368,7 @@ export default function DashboardLayout({
           {/* Left Column — Breadcrumb indicator or brand helper */}
           <div className="flex items-center gap-2 text-xs text-on-surface-variant font-mono uppercase tracking-wider">
             <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-            Workspace Active
+            {role.replace("_", " ")} ACTIVE
           </div>
 
           {/* Center Column — Centered Search Bar with Suggestions */}
@@ -428,12 +483,14 @@ export default function DashboardLayout({
               </Link>
             </div>
             <div className="h-8 w-px bg-outline-variant"></div>
-            <Link
-              href="/assets/new"
-              className="bg-primary text-on-primary px-4 py-2 rounded-lg font-semibold text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all text-center flex items-center justify-center"
-            >
-              Add Asset
-            </Link>
+            {(role === "ADMIN" || role === "ASSET_MANAGER") && (
+              <Link
+                href="/assets/new"
+                className="bg-primary text-on-primary px-4 py-2 rounded-lg font-semibold text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all text-center flex items-center justify-center"
+              >
+                Add Asset
+              </Link>
+            )}
             <Link
               href="/settings"
               className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
@@ -466,7 +523,9 @@ export default function DashboardLayout({
           {/* Atmospheric Background Blurs */}
           <div className="absolute top-0 right-0 -z-10 w-[500px] h-[500px] bg-primary/5 blur-[120px] rounded-full pointer-events-none"></div>
           <div className="absolute bottom-0 left-0 -z-10 w-[300px] h-[300px] bg-tertiary/5 blur-[100px] rounded-full pointer-events-none"></div>
-          <div className="max-w-6xl mx-auto w-full">{children}</div>
+          <div className="max-w-6xl mx-auto w-full">
+            {isPathAllowed ? children : <AccessDenied />}
+          </div>
         </main>
       </div>
     </div>

@@ -30,7 +30,8 @@ function KPICard({ label, value, subtext, icon, colorClass }: KPICardProps) {
 
 export default function DashboardPage() {
   const [alertDismissed, setAlertDismissed] = useState(false);
-  const [userName, setUserName] = useState("Admin");
+  const [userName, setUserName] = useState("User");
+  const [user, setUser] = useState<any>(null);
   const [stats, setStats] = useState({
     available: 0,
     allocated: 0,
@@ -43,20 +44,55 @@ export default function DashboardPage() {
 
   const loadData = useCallback(async () => {
     try {
+      const uStr = localStorage.getItem("user");
+      let currentUser: any = null;
+      if (uStr) {
+        currentUser = JSON.parse(uStr);
+      }
+
       const assetsRes = await apiFetch("/assets?limit=150");
       const bookingsRes = await apiFetch("/bookings");
       const transfersRes = await apiFetch("/transfers");
       const maintenanceRes = await apiFetch("/maintenance");
 
-      const totalAssets = assetsRes.data || [];
+      let totalAssets = assetsRes.data || [];
+      let bookings = bookingsRes || [];
+      let transfers = transfersRes || [];
+      let maintenance = maintenanceRes || [];
+
+      // Filter statistics and lists according to functional roles
+      if (currentUser) {
+        if (currentUser.role === "EMPLOYEE") {
+          // Employee views assets allocated to them
+          totalAssets = totalAssets.filter((a: any) =>
+            a.allocations?.some((al: any) => al.allocatedToId === currentUser.id && al.status === "ACTIVE")
+          );
+          // Books shared resources (only show their bookings)
+          bookings = bookings.filter((b: any) => b.bookedById === currentUser.id);
+          // Maintenance requests raised by them
+          maintenance = maintenance.filter((m: any) => m.requestedById === currentUser.id);
+          // Transfers initiated by them
+          transfers = transfers.filter((t: any) => t.userId === currentUser.id);
+        } else if (currentUser.role === "DEPARTMENT_HEAD") {
+          // Department Head views assets allocated to their department
+          totalAssets = totalAssets.filter((a: any) => a.departmentId === currentUser.departmentId);
+          // Bookings in their department or booked by them
+          bookings = bookings.filter(
+            (b: any) => b.asset?.departmentId === currentUser.departmentId || b.bookedById === currentUser.id
+          );
+          // Transfers involving department
+          transfers = transfers.filter((t: any) => t.departmentId === currentUser.departmentId);
+        }
+      }
+
       const avail = totalAssets.filter((a: any) => a.status === "AVAILABLE").length;
       const alloc = totalAssets.filter((a: any) => a.status === "ALLOCATED").length;
       const maint = totalAssets.filter((a: any) => a.status === "UNDER_MAINTENANCE" || a.status === "UNDER_SERVICE").length;
 
-      const activeBookings = bookingsRes.filter((b: any) => b.status === "UPCOMING" || b.status === "ONGOING").length;
-      const pendingTrans = transfersRes.filter((t: any) => t.status === "REQUESTED" || t.status === "DEPT_HEAD_APPROVED").length;
+      const activeBookings = bookings.filter((b: any) => b.status === "UPCOMING" || b.status === "ONGOING").length;
+      const pendingTrans = transfers.filter((t: any) => t.status === "REQUESTED" || t.status === "DEPT_HEAD_APPROVED").length;
 
-      // Count overdue allocations (expected return date is in the past and status is ACTIVE)
+      // Count overdue allocations
       let overdueCount = 0;
       const now = new Date().getTime();
       totalAssets.forEach((asset: any) => {
@@ -70,7 +106,7 @@ export default function DashboardPage() {
       setStats({
         available: avail,
         allocated: alloc,
-        maintenance: maint || maintenanceRes.filter((m: any) => m.status !== "RESOLVED" && m.status !== "CLOSED").length,
+        maintenance: maint || maintenance.filter((m: any) => m.status !== "RESOLVED" && m.status !== "CLOSED").length,
         bookings: activeBookings,
         transfers: pendingTrans,
         overdue: overdueCount,
@@ -95,7 +131,7 @@ export default function DashboardPage() {
       });
 
       // Bookings
-      bookingsRes.forEach((b: any) => {
+      bookings.forEach((b: any) => {
         activities.push({
           id: `book-${b.id}`,
           text: b.asset?.name || "Resource",
@@ -108,7 +144,7 @@ export default function DashboardPage() {
       });
 
       // Maintenance Requests
-      maintenanceRes.forEach((m: any) => {
+      maintenance.forEach((m: any) => {
         activities.push({
           id: `maint-${m.id}`,
           text: m.asset?.name || "Asset",
@@ -120,10 +156,8 @@ export default function DashboardPage() {
         });
       });
 
-      // Sort activities descending by time
       activities.sort((a, b) => b.time.getTime() - a.time.getTime());
 
-      // Format relative times
       const formatted = activities.slice(0, 5).map((act) => {
         const diffMs = Date.now() - act.time.getTime();
         const diffMins = Math.floor(diffMs / 60000);
@@ -154,7 +188,8 @@ export default function DashboardPage() {
       if (uStr) {
         try {
           const userObj = JSON.parse(uStr);
-          setUserName(userObj.firstName || "Admin");
+          setUser(userObj);
+          setUserName(userObj.firstName || "User");
         } catch (e) {
           console.error(e);
         }
@@ -169,6 +204,8 @@ export default function DashboardPage() {
       loadData();
     },
   });
+
+  const role = user?.role || "EMPLOYEE";
 
   return (
     <div className="space-y-6">
@@ -212,13 +249,15 @@ export default function DashboardPage() {
 
       {/* Action Bar */}
       <div className="flex flex-wrap gap-3 items-center">
-        <Link
-          href="/assets/new"
-          className="bg-primary text-on-primary font-bold px-4 py-2.5 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5"
-        >
-          <span className="material-symbols-outlined text-sm">add</span>
-          Register Asset
-        </Link>
+        {(role === "ADMIN" || role === "ASSET_MANAGER") && (
+          <Link
+            href="/assets/new"
+            className="bg-primary text-on-primary font-bold px-4 py-2.5 rounded-lg text-xs uppercase tracking-wide hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5"
+          >
+            <span className="material-symbols-outlined text-sm">add</span>
+            Register Asset
+          </Link>
+        )}
         <Link
           href="/booking"
           className="bg-surface-container border border-outline-variant text-on-surface hover:bg-surface-container-high font-bold px-4 py-2.5 rounded-lg text-xs uppercase tracking-wide active:scale-95 transition-all flex items-center gap-1.5"
@@ -226,13 +265,15 @@ export default function DashboardPage() {
           <span className="material-symbols-outlined text-sm">calendar_month</span>
           Book Resource
         </Link>
-        <Link
-          href="/allocation"
-          className="bg-surface-container border border-outline-variant text-on-surface hover:bg-surface-container-high font-bold px-4 py-2.5 rounded-lg text-xs uppercase tracking-wide active:scale-95 transition-all flex items-center gap-1.5"
-        >
-          <span className="material-symbols-outlined text-sm">notifications_active</span>
-          Agree Requests
-        </Link>
+        {(role === "ADMIN" || role === "ASSET_MANAGER" || role === "DEPARTMENT_HEAD") && (
+          <Link
+            href="/allocation"
+            className="bg-surface-container border border-outline-variant text-on-surface hover:bg-surface-container-high font-bold px-4 py-2.5 rounded-lg text-xs uppercase tracking-wide active:scale-95 transition-all flex items-center gap-1.5"
+          >
+            <span className="material-symbols-outlined text-sm">notifications_active</span>
+            Agree Requests
+          </Link>
+        )}
       </div>
 
       {/* Details Row */}
@@ -268,50 +309,35 @@ export default function DashboardPage() {
 
         {/* Quick Diagnostics / Statistics panel */}
         <div className="glass-card rounded-xl p-5 flex flex-col justify-between shadow-lg bg-surface">
-          <div className="space-y-4">
-            <h3 className="text-xs font-mono text-on-surface-variant font-bold tracking-widest border-b border-outline-variant pb-2">
-              DIAGNOSTICS & STATUS
+          <div>
+            <h3 className="text-xs font-mono text-on-surface font-bold tracking-widest mb-4">
+              ROLE COMPLIANCE SUMMARY
             </h3>
-
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between text-xs text-on-surface-variant mb-1 font-semibold">
-                  <span>Network Sync Status</span>
-                  <span className="text-primary">100% Operational</span>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center bg-surface-container/40 p-3 rounded-lg border border-outline-variant/15">
+                <div>
+                  <h4 className="text-xs font-bold text-on-surface">Compliance Status</h4>
+                  <p className="text-[10px] text-on-surface-variant font-mono mt-0.5">Asset audit cycle checks</p>
                 </div>
-                <div className="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-primary h-full w-[100%] rounded-full"></div>
-                </div>
+                <span className="bg-success/15 text-success text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
+                  ACTIVE
+                </span>
               </div>
-
-              <div>
-                <div className="flex justify-between text-xs text-on-surface-variant mb-1 font-semibold">
-                  <span>Database Integrity</span>
-                  <span className="text-secondary">Fully Secure</span>
+              <div className="flex justify-between items-center bg-surface-container/40 p-3 rounded-lg border border-outline-variant/15">
+                <div>
+                  <h4 className="text-xs font-bold text-on-surface">Pending Clearances</h4>
+                  <p className="text-[10px] text-on-surface-variant font-mono mt-0.5">Approved transfers check</p>
                 </div>
-                <div className="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-secondary h-full w-[100%] rounded-full"></div>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs text-on-surface-variant mb-1 font-semibold">
-                  <span>Active Service Requests</span>
-                  <span className="text-tertiary">{stats.maintenance} Open Tickets</span>
-                </div>
-                <div className="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-tertiary h-full w-[35%] rounded-full"></div>
-                </div>
+                <span className="bg-info/15 text-info text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider font-mono">
+                  {stats.transfers} PENDING
+                </span>
               </div>
             </div>
           </div>
-
-          <div className="mt-6 pt-4 border-t border-outline-variant/30 flex justify-between items-center text-xs text-on-surface-variant">
-            <span>Server Database: SQLite</span>
-            <span className="flex items-center gap-1 font-semibold text-primary">
-              <span className="w-2 h-2 bg-primary rounded-full animate-pulse"></span>
-              Live Syncing
-            </span>
+          <div className="mt-6 border-t border-outline-variant/20 pt-4">
+            <p className="text-[10px] text-on-surface-variant/60 leading-relaxed font-mono">
+              Role: <span className="text-primary font-bold">{role.replace("_", " ")}</span>
+            </p>
           </div>
         </div>
       </div>
