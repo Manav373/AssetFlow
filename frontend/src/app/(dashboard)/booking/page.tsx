@@ -1,18 +1,4 @@
-<<<<<<< HEAD
-"use client";
 
-import React from "react";
-import ComingSoon from "@/components/shared/ComingSoon";
-
-export default function BookingPage() {
-  return (
-    <div className="py-12">
-      <ComingSoon
-        title="Resource Booking Calendar"
-        description="Book shared facilities, conference rooms, vehicles, or test equipment with overlap collision detection."
-        icon="event_available"
-      />
-=======
 /**
  * @module ResourceBooking
  * @description Interactive calendar timeline for facility bookings with collision detection.
@@ -431,7 +417,7 @@ export default function BookingPage() {
           </motion.div>
         )}
       </AnimatePresence>
->>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
+
     </div>
   );
 }

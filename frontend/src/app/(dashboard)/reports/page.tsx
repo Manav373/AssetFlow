@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-"use client";
-
-import React, { useState } from "react";
-
-=======
 /**
  * @module ReportsAnalytics
  * @description Analytics dashboard with Recharts (Bar, Area, Pie) and export tools.
@@ -32,7 +26,6 @@ import {
 } from "recharts";
 
 // --- Mock Data ---
->>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
 interface AssetUsageItem {
   id: string;
   name: string;
@@ -52,8 +45,6 @@ interface IdleAssetItem {
   badge: string;
 }
 
-<<<<<<< HEAD
-=======
 const DEPARTMENT_DATA = [
   { name: "Logistics", utilization: 85, capacity: 100 },
   { name: "R&D", utilization: 62, capacity: 100 },
@@ -87,8 +78,6 @@ const ASSET_STATUS_DATA = [
   { name: "Under Service", value: 18, color: "#ffb786" },
   { name: "Retired", value: 12, color: "#8c909f" },
 ];
-
->>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
 const MOST_USED_ASSETS: AssetUsageItem[] = [
   {
     id: "1",
@@ -138,13 +127,6 @@ const IDLE_ASSETS: IdleAssetItem[] = [
   },
 ];
 
-<<<<<<< HEAD
-export default function ReportsPage() {
-  const [viewMode, setViewMode] = useState<"live" | "historical">("live");
-
-  const filterByDept = (dept: string) => {
-    alert(`Filtering analytics dashboard by ${dept} Department`);
-=======
 // Custom tooltip styling
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
   if (!active || !payload) return null;
@@ -166,7 +148,6 @@ export default function ReportsPage() {
   const handleExport = (type: "pdf" | "excel") => {
     const filename = `AssetFlow_Report_${new Date().toISOString().split("T")[0]}.${type === "pdf" ? "pdf" : "xlsx"}`;
     alert(`Preparing ${type.toUpperCase()} export: ${filename}\n\n(Mock action — real export will be integrated with backend)`);
->>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
   };
 
   return (
@@ -179,9 +160,6 @@ export default function ReportsPage() {
             Real-time performance metrics across enterprise assets.
           </p>
         </div>
-<<<<<<< HEAD
-        <div className="flex gap-2">
-=======
         <div className="flex gap-2 items-center">
           {/* Export Buttons */}
           <button
@@ -200,7 +178,6 @@ export default function ReportsPage() {
           </button>
 
           {/* View Mode Toggle */}
->>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
           <div className="bg-surface-container border border-outline-variant rounded flex p-1">
             <button
               onClick={() => setViewMode("live")}
@@ -232,11 +209,7 @@ export default function ReportsPage() {
         <div
           role="region"
           aria-label="Utilization by department bar chart"
-<<<<<<< HEAD
-          className="col-span-12 lg:col-span-7 bg-surface-container border border-outline-variant rounded-xl p-6 relative overflow-hidden"
-=======
           className="col-span-12 lg:col-span-7 bg-surface-container border border-outline-variant rounded-xl p-6"
->>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
         >
           <div className="flex justify-between items-start mb-6">
             <div>
@@ -250,36 +223,6 @@ export default function ReportsPage() {
             </button>
           </div>
 
-<<<<<<< HEAD
-          {/* Simple Dynamic SVG Bar Chart */}
-          <div className="h-64 flex items-end gap-3 px-4 pb-4 select-none">
-            {[
-              { name: "Logistics", pct: "85%" },
-              { name: "R&D", pct: "62%" },
-              { name: "Production", pct: "94%" },
-              { name: "IT Ops", pct: "45%" },
-              { name: "Quality", pct: "78%" },
-              { name: "Admin", pct: "32%" },
-            ].map((dept) => (
-              <div
-                key={dept.name}
-                onClick={() => filterByDept(dept.name)}
-                className="flex-1 flex flex-col gap-2 group cursor-pointer"
-                title={`View ${dept.name} Details`}
-              >
-                <div className="relative w-full bg-surface-container-highest rounded-t-lg overflow-hidden h-40">
-                  <div
-                    className="absolute bottom-0 w-full bg-primary transition-all duration-500 group-hover:brightness-110"
-                    style={{ height: dept.pct }}
-                  ></div>
-                </div>
-                <span className="text-center font-semibold text-xs text-on-surface-variant group-hover:text-primary transition-colors">
-                  {dept.name}
-                </span>
-              </div>
-            ))}
-          </div>
-=======
           {/* --- START: Dev 4 — Recharts Bar Chart replacing SVG ---  */}
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -309,7 +252,6 @@ export default function ReportsPage() {
             </ResponsiveContainer>
           </div>
           {/* --- END: Dev 4 — Recharts Bar Chart --- */}
->>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
         </div>
 
         {/* KPI Grid */}
@@ -365,19 +307,11 @@ export default function ReportsPage() {
           </button>
         </div>
 
-<<<<<<< HEAD
-        {/* Maintenance Frequency (Line Chart) */}
-        <div
-          role="region"
-          aria-label="Maintenance frequency line chart"
-          className="col-span-12 lg:col-span-8 bg-surface-container border border-outline-variant rounded-xl p-6 relative overflow-hidden min-h-[400px]"
-=======
         {/* Maintenance Frequency (Area Chart) */}
         <div
           role="region"
           aria-label="Maintenance frequency area chart"
           className="col-span-12 lg:col-span-8 bg-surface-container border border-outline-variant rounded-xl p-6"
->>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
         >
           <div className="flex justify-between items-center mb-6">
             <div>
@@ -395,35 +329,6 @@ export default function ReportsPage() {
             </button>
           </div>
 
-<<<<<<< HEAD
-          {/* SVG Line Chart */}
-          <div className="absolute inset-0 top-32 px-6 pb-6">
-            <svg className="w-full h-full overflow-visible" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="lineGrad" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="#adc6ff" stopOpacity="0.15"></stop>
-                  <stop offset="100%" stopColor="#adc6ff" stopOpacity="0"></stop>
-                </linearGradient>
-              </defs>
-              <path
-                d="M 0 160 Q 150 110 300 130 T 600 50 T 900 80 T 1200 30"
-                fill="transparent"
-                stroke="#adc6ff"
-                strokeWidth="3"
-                className="transition-all duration-500"
-              ></path>
-              <path
-                d="M 0 160 Q 150 110 300 130 T 600 50 T 900 80 T 1200 30 L 1200 300 L 0 300 Z"
-                fill="url(#lineGrad)"
-              ></path>
-            </svg>
-            {/* Grid Lines */}
-            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none border-b border-outline-variant opacity-10">
-              <div className="border-t border-outline-variant w-full h-px"></div>
-              <div className="border-t border-outline-variant w-full h-px"></div>
-              <div className="border-t border-outline-variant w-full h-px"></div>
-            </div>
-=======
           {/* --- START: Dev 4 — Recharts Area Chart replacing SVG --- */}
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -528,16 +433,11 @@ export default function ReportsPage() {
                 <span className="font-mono font-bold text-on-surface">{item.value}</span>
               </div>
             ))}
->>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
           </div>
         </div>
 
         {/* Right Rail: Performance Lists */}
-<<<<<<< HEAD
-        <div className="col-span-12 lg:col-span-4 flex flex-col gap-4">
-=======
         <div className="col-span-12 flex flex-col lg:flex-row gap-4">
->>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
           {/* Most Used Assets */}
           <div className="bg-surface-container border border-outline-variant rounded-xl p-4 flex-1">
             <div className="flex justify-between items-center mb-4 border-b border-outline-variant pb-2">

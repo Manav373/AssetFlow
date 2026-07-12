@@ -1,18 +1,4 @@
-<<<<<<< HEAD
-"use client";
 
-import React from "react";
-import ComingSoon from "@/components/shared/ComingSoon";
-
-export default function MaintenancePage() {
-  return (
-    <div className="py-12">
-      <ComingSoon
-        title="Maintenance Management"
-        description="Raise tickets, approve service events, assign technicians, track repair costs, and log task resolutions."
-        icon="build"
-      />
-=======
 /**
  * @module MaintenancePipeline
  * @description Kanban board with drag-and-drop for maintenance ticket lifecycle management.
@@ -436,7 +422,7 @@ export default function MaintenancePage() {
           </motion.div>
         )}
       </AnimatePresence>
->>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
+
     </div>
   );
 }

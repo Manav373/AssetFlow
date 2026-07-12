@@ -1,18 +1,4 @@
-<<<<<<< HEAD
-"use client";
 
-import React from "react";
-import ComingSoon from "@/components/shared/ComingSoon";
-
-export default function AllocationPage() {
-  return (
-    <div className="py-12">
-      <ComingSoon
-        title="Asset Allocation & Transfer"
-        description="Allocate inventory items to personnel, trigger multi-stage department transfer approvals, and process check-in returns."
-        icon="assignment_ind"
-      />
-=======
 /**
  * @module AssetAllocation
  * @description Handover form with conflict rule checking and transfer requests panel.
@@ -493,7 +479,7 @@ export default function AllocationPage() {
           </motion.div>
         )}
       </AnimatePresence>
->>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
+
     </div>
   );
 }

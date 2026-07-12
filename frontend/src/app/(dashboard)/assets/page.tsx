@@ -1,6 +1,6 @@
 "use client";
 
-<<<<<<< HEAD
+
 /**
  * @module AssetsPage
  * @description Asset directory view with filter bar, status badges, and deep-link routing.
@@ -12,6 +12,7 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Asset, AssetStatus } from "@/types/api";
 
 // ─── Mock Data ───────────────────────────────────────────────────────────────
@@ -153,6 +154,7 @@ function StatusBadge({ status }: { status: AssetStatus }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AssetsPage() {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [filterLocation, setFilterLocation] = useState("");
@@ -330,11 +332,11 @@ export default function AssetsPage() {
                 </tr>
               ) : (
                 filtered.map((asset) => (
-                  <Link
+                  <tr
                     key={asset.id}
-                    href={`/assets/${asset.id}`}
                     id={`asset-row-${asset.id}`}
-                    className="table-row hover:bg-surface-container-high/30 transition-all cursor-pointer group"
+                    onClick={() => router.push(`/assets/${asset.id}`)}
+                    className="hover:bg-surface-container-high/30 transition-all cursor-pointer group"
                   >
                     <td className="px-6 py-4">
                       <span className="font-mono text-xs bg-surface-container px-2.5 py-1.5 rounded text-primary font-semibold tracking-wider">
@@ -384,7 +386,7 @@ export default function AssetsPage() {
                         arrow_forward_ios
                       </span>
                     </td>
-                  </Link>
+                  </tr>
                 ))
               )}
             </tbody>
@@ -420,19 +422,7 @@ export default function AssetsPage() {
           </div>
         </div>
       </div>
-=======
-import React from "react";
-import ComingSoon from "@/components/shared/ComingSoon";
 
-export default function AssetsPage() {
-  return (
-    <div className="py-12">
-      <ComingSoon
-        title="Asset Directory"
-        description="Register physical items, upload documentation/photos, generate unique QR/barcodes, and view active lifecycle statuses."
-        icon="inventory_2"
-      />
->>>>>>> d52f8a1 (feat: implement Dev4 allocation, booking, maintenance, reports & socket.io)
     </div>
   );
 }
